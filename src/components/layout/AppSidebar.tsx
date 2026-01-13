@@ -24,6 +24,7 @@ const mainItems = [
 const inventoryItems = [
   { title: 'Items', url: '/items', icon: Package },
   { title: 'Inventory', url: '/inventory', icon: Boxes },
+  { title: 'Purchases', url: '/purchases', icon: FileText },
   { title: 'Suppliers', url: '/suppliers', icon: Truck },
 ];
 
