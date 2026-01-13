@@ -1,0 +1,279 @@
+import { useState, useMemo } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useItems } from '@/hooks/useItems';
+import { useBatchesByItem, type Batch } from '@/hooks/useBatches';
+import { useSales, useCreateSale, type SaleLineItem, type SaleWithDetails } from '@/hooks/useSales';
+import { format } from 'date-fns';
+import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp } from 'lucide-react';
+
+function QuickSale() {
+  const [search, setSearch] = useState('');
+  const [selectedItemId, setSelectedItemId] = useState<string>('');
+  const [lineItems, setLineItems] = useState<SaleLineItem[]>([]);
+  const [discount, setDiscount] = useState(0);
+
+  const { data: items } = useItems();
+  const { data: batches } = useBatchesByItem(selectedItemId);
+  const createSale = useCreateSale();
+
+  const filteredItems = useMemo(() => {
+    if (!items || !search) return [];
+    return items.filter(i => 
+      i.name.toLowerCase().includes(search.toLowerCase()) || 
+      i.item_code.toLowerCase().includes(search.toLowerCase())
+    ).slice(0, 10);
+  }, [items, search]);
+
+  const addItem = (itemId: string) => {
+    const item = items?.find(i => i.id === itemId);
+    if (!item) return;
+    setSelectedItemId(itemId);
+  };
+
+  const selectBatch = (batch: Batch) => {
+    const item = items?.find(i => i.id === selectedItemId);
+    if (!item || batch.remaining_quantity <= 0) return;
+
+    setLineItems([...lineItems, {
+      item_id: item.id,
+      item_name: item.name,
+      batch_id: batch.id,
+      batch_name: batch.batch_name,
+      quantity_primary: 1,
+      quantity_secondary: item.conversion_factor ? 1 / item.conversion_factor : null,
+      rate: batch.selling_price,
+      purchase_price: batch.purchase_price,
+      total: batch.selling_price,
+      profit: batch.selling_price - batch.purchase_price,
+    }]);
+    setSelectedItemId('');
+    setSearch('');
+  };
+
+  const updateQuantity = (index: number, qty: number) => {
+    const updated = [...lineItems];
+    const item = updated[index];
+    item.quantity_primary = qty;
+    item.total = qty * item.rate;
+    item.profit = (item.rate - item.purchase_price) * qty;
+    setLineItems(updated);
+  };
+
+  const updateRate = (index: number, rate: number) => {
+    const updated = [...lineItems];
+    const item = updated[index];
+    item.rate = rate;
+    item.total = item.quantity_primary * rate;
+    item.profit = (rate - item.purchase_price) * item.quantity_primary;
+    setLineItems(updated);
+  };
+
+  const removeItem = (index: number) => {
+    setLineItems(lineItems.filter((_, i) => i !== index));
+  };
+
+  const subtotal = lineItems.reduce((sum, i) => sum + i.total, 0);
+  const totalAmount = subtotal - discount;
+  const totalProfit = lineItems.reduce((sum, i) => sum + i.profit, 0) - discount;
+
+  const handleSave = async () => {
+    if (lineItems.length === 0) return;
+    await createSale.mutateAsync({
+      sale_type: 'quick',
+      subtotal,
+      discount,
+      tax: 0,
+      total_amount: totalAmount,
+      items: lineItems,
+    });
+    setLineItems([]);
+    setDiscount(0);
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Card className="lg:col-span-2">
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm">Items</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search item by name or code..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setSelectedItemId(''); }}
+              className="pl-8 h-9"
+            />
+          </div>
+
+          {search && filteredItems.length > 0 && !selectedItemId && (
+            <div className="border rounded-md max-h-48 overflow-auto">
+              {filteredItems.map(item => (
+                <div key={item.id} className="p-2 hover:bg-accent cursor-pointer flex justify-between items-center" onClick={() => addItem(item.id)}>
+                  <span><span className="font-mono text-xs">{item.item_code}</span> - {item.name}</span>
+                  <Badge variant="outline">{item.total_stock} {item.primary_unit}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {selectedItemId && batches && (
+            <div className="border rounded-md p-2 space-y-2">
+              <div className="text-sm font-medium">Select Batch:</div>
+              <div className="flex flex-wrap gap-2">
+                {batches.filter(b => b.remaining_quantity > 0).map(batch => (
+                  <Button key={batch.id} variant="outline" size="sm" className="text-xs" onClick={() => selectBatch(batch)}>
+                    {batch.batch_name.split('/')[0]} - {batch.remaining_quantity} @ ₹{batch.selling_price}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {lineItems.length > 0 && (
+            <Table className="data-table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Batch</TableHead>
+                  <TableHead className="w-20">Qty</TableHead>
+                  <TableHead className="w-24">Rate ₹</TableHead>
+                  <TableHead className="text-right">Total ₹</TableHead>
+                  <TableHead className="w-8"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lineItems.map((item, i) => (
+                  <TableRow key={i}>
+                    <TableCell>{item.item_name}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-xs">{item.batch_name.split('/')[0]}</Badge></TableCell>
+                    <TableCell>
+                      <Input type="number" value={item.quantity_primary} onChange={(e) => updateQuantity(i, parseFloat(e.target.value) || 0)} className="h-7 w-16" />
+                    </TableCell>
+                    <TableCell>
+                      <Input type="number" value={item.rate} onChange={(e) => updateRate(i, parseFloat(e.target.value) || 0)} className="h-7 w-20" />
+                    </TableCell>
+                    <TableCell className="text-right font-mono">₹{item.total.toFixed(2)}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeItem(i)}><Trash2 className="w-3 h-3" /></Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm">Summary</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex justify-between text-sm"><span>Subtotal</span><span className="font-mono">₹{subtotal.toFixed(2)}</span></div>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs">Discount ₹</Label>
+            <Input type="number" value={discount} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} className="h-7 w-24" />
+          </div>
+          <div className="flex justify-between font-bold text-lg border-t pt-2"><span>Total</span><span className="font-mono">₹{totalAmount.toFixed(2)}</span></div>
+          <div className="flex justify-between text-sm text-green-400"><TrendingUp className="w-4 h-4" /><span>Profit: ₹{totalProfit.toFixed(2)}</span></div>
+          <Button className="w-full gap-1" onClick={handleSave} disabled={lineItems.length === 0 || createSale.isPending}>
+            <ShoppingCart className="w-4 h-4" />
+            {createSale.isPending ? 'Saving...' : 'Complete Sale'}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SalesHistory() {
+  const [showProfit, setShowProfit] = useState(false);
+  const [viewSale, setViewSale] = useState<SaleWithDetails | null>(null);
+  const { data: sales, isLoading } = useSales();
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => setShowProfit(!showProfit)}>
+          <TrendingUp className="w-3 h-3 mr-1" />{showProfit ? 'Hide' : 'Show'} Profit
+        </Button>
+      </div>
+      <div className="border rounded-md">
+        <Table className="data-table">
+          <TableHeader>
+            <TableRow>
+              <TableHead>Invoice #</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Customer</TableHead>
+              <TableHead>Items</TableHead>
+              <TableHead className="text-right">Total ₹</TableHead>
+              {showProfit && <TableHead className="text-right">Profit ₹</TableHead>}
+              <TableHead className="w-16"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              <TableRow><TableCell colSpan={showProfit ? 7 : 6} className="text-center py-8">Loading...</TableCell></TableRow>
+            ) : sales?.length === 0 ? (
+              <TableRow><TableCell colSpan={showProfit ? 7 : 6} className="text-center py-8">No sales yet.</TableCell></TableRow>
+            ) : (
+              sales?.map(sale => (
+                <TableRow key={sale.id}>
+                  <TableCell className="font-mono text-sm">{sale.sale_number}</TableCell>
+                  <TableCell>{format(new Date(sale.sale_date), 'dd MMM yyyy')}</TableCell>
+                  <TableCell>{sale.customer_name || '-'}</TableCell>
+                  <TableCell><Badge variant="secondary">{sale.sale_items.length}</Badge></TableCell>
+                  <TableCell className="text-right font-mono font-medium">₹{sale.total_amount}</TableCell>
+                  {showProfit && <TableCell className="text-right font-mono text-green-400">₹{sale.total_profit}</TableCell>}
+                  <TableCell><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)}><Eye className="w-3 h-3" /></Button></TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      <Dialog open={!!viewSale} onOpenChange={(o) => !o && setViewSale(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>Sale {viewSale?.sale_number}</DialogTitle></DialogHeader>
+          <Table className="data-table">
+            <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Batch</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Rate</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {viewSale?.sale_items.map(si => (
+                <TableRow key={si.id}>
+                  <TableCell>{si.items?.name}</TableCell>
+                  <TableCell><Badge variant="outline">{si.batches?.batch_name.split('/')[0]}</Badge></TableCell>
+                  <TableCell className="text-right">{si.quantity_primary}</TableCell>
+                  <TableCell className="text-right">₹{si.rate}</TableCell>
+                  <TableCell className="text-right font-medium">₹{si.total}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+export default function Sales() {
+  return (
+    <div className="space-y-4">
+      <h1 className="text-xl font-semibold">Sales</h1>
+      <Tabs defaultValue="quick">
+        <TabsList><TabsTrigger value="quick">Quick Sale</TabsTrigger><TabsTrigger value="history">History</TabsTrigger></TabsList>
+        <TabsContent value="quick" className="mt-4"><QuickSale /></TabsContent>
+        <TabsContent value="history" className="mt-4"><SalesHistory /></TabsContent>
+      </Tabs>
+    </div>
+  );
+}
