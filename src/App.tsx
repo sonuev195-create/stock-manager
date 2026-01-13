@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Install from "./pages/Install";
+import Items from "./pages/Items";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,7 +31,7 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute><div className="text-muted-foreground">Sales module coming soon...</div></ProtectedRoute>} />
       <Route path="/bills" element={<ProtectedRoute><div className="text-muted-foreground">Bills module coming soon...</div></ProtectedRoute>} />
-      <Route path="/items" element={<ProtectedRoute><div className="text-muted-foreground">Items module coming soon...</div></ProtectedRoute>} />
+      <Route path="/items" element={<ProtectedRoute><Items /></ProtectedRoute>} />
       <Route path="/inventory" element={<ProtectedRoute><div className="text-muted-foreground">Inventory module coming soon...</div></ProtectedRoute>} />
       <Route path="/suppliers" element={<ProtectedRoute><div className="text-muted-foreground">Suppliers module coming soon...</div></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><div className="text-muted-foreground">Settings coming soon...</div></ProtectedRoute>} />
