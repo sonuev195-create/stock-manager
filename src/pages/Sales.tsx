@@ -8,21 +8,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useItems } from '@/hooks/useItems';
+import { useItems, type ItemWithCategory } from '@/hooks/useItems';
 import { useBatchesByItem, type Batch } from '@/hooks/useBatches';
 import { useSales, useCreateSale, type SaleLineItem, type SaleWithDetails } from '@/hooks/useSales';
 import { format } from 'date-fns';
-import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp } from 'lucide-react';
+import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, RefreshCw } from 'lucide-react';
+
+interface SaleLineItemWithUnits extends SaleLineItem {
+  primary_unit: string;
+  secondary_unit: string | null;
+  conversion_factor: number | null;
+}
 
 function QuickSale() {
   const [search, setSearch] = useState('');
   const [selectedItemId, setSelectedItemId] = useState<string>('');
-  const [lineItems, setLineItems] = useState<SaleLineItem[]>([]);
+  const [lineItems, setLineItems] = useState<SaleLineItemWithUnits[]>([]);
   const [discount, setDiscount] = useState(0);
 
   const { data: items } = useItems();
   const { data: batches } = useBatchesByItem(selectedItemId);
   const createSale = useCreateSale();
+
+  const selectedItem = useMemo(() => items?.find(i => i.id === selectedItemId), [items, selectedItemId]);
 
   const filteredItems = useMemo(() => {
     if (!items || !search) return [];
@@ -42,28 +50,55 @@ function QuickSale() {
     const item = items?.find(i => i.id === selectedItemId);
     if (!item || batch.remaining_quantity <= 0) return;
 
+    const conversionFactor = item.conversion_factor || null;
+    const secondaryQty = conversionFactor ? 1 * conversionFactor : null;
+
     setLineItems([...lineItems, {
       item_id: item.id,
       item_name: item.name,
       batch_id: batch.id,
       batch_name: batch.batch_name,
       quantity_primary: 1,
-      quantity_secondary: item.conversion_factor ? 1 / item.conversion_factor : null,
+      quantity_secondary: secondaryQty,
       rate: batch.selling_price,
       purchase_price: batch.purchase_price,
       total: batch.selling_price,
       profit: batch.selling_price - batch.purchase_price,
+      primary_unit: item.primary_unit,
+      secondary_unit: item.secondary_unit || null,
+      conversion_factor: conversionFactor,
     }]);
     setSelectedItemId('');
     setSearch('');
   };
 
-  const updateQuantity = (index: number, qty: number) => {
+  const updatePrimaryQuantity = (index: number, qty: number) => {
     const updated = [...lineItems];
     const item = updated[index];
     item.quantity_primary = qty;
+    
+    // Auto-calculate secondary
+    if (item.conversion_factor) {
+      item.quantity_secondary = qty * item.conversion_factor;
+    }
+    
     item.total = qty * item.rate;
     item.profit = (item.rate - item.purchase_price) * qty;
+    setLineItems(updated);
+  };
+
+  const updateSecondaryQuantity = (index: number, qty: number) => {
+    const updated = [...lineItems];
+    const item = updated[index];
+    item.quantity_secondary = qty;
+    
+    // Auto-calculate primary from secondary
+    if (item.conversion_factor && item.conversion_factor !== 0) {
+      item.quantity_primary = qty / item.conversion_factor;
+      item.total = item.quantity_primary * item.rate;
+      item.profit = (item.rate - item.purchase_price) * item.quantity_primary;
+    }
+    
     setLineItems(updated);
   };
 
@@ -92,7 +127,18 @@ function QuickSale() {
       discount,
       tax: 0,
       total_amount: totalAmount,
-      items: lineItems,
+      items: lineItems.map(li => ({
+        item_id: li.item_id,
+        item_name: li.item_name,
+        batch_id: li.batch_id,
+        batch_name: li.batch_name,
+        quantity_primary: li.quantity_primary,
+        quantity_secondary: li.quantity_secondary,
+        rate: li.rate,
+        purchase_price: li.purchase_price,
+        total: li.total,
+        profit: li.profit,
+      })),
     });
     setLineItems([]);
     setDiscount(0);
@@ -117,59 +163,125 @@ function QuickSale() {
 
           {search && filteredItems.length > 0 && !selectedItemId && (
             <div className="border rounded-md max-h-48 overflow-auto">
-              {filteredItems.map(item => (
-                <div key={item.id} className="p-2 hover:bg-accent cursor-pointer flex justify-between items-center" onClick={() => addItem(item.id)}>
-                  <span><span className="font-mono text-xs">{item.item_code}</span> - {item.name}</span>
-                  <Badge variant="outline">{item.total_stock} {item.primary_unit}</Badge>
-                </div>
-              ))}
+              {filteredItems.map(item => {
+                const secondaryStock = item.conversion_factor && item.secondary_unit 
+                  ? (item.total_stock || 0) * item.conversion_factor 
+                  : null;
+                return (
+                  <div key={item.id} className="p-2 hover:bg-accent cursor-pointer flex justify-between items-center" onClick={() => addItem(item.id)}>
+                    <span><span className="font-mono text-xs">{item.item_code}</span> - {item.name}</span>
+                    <div className="text-right">
+                      <Badge variant="outline">{item.total_stock} {item.primary_unit}</Badge>
+                      {secondaryStock !== null && item.secondary_unit && (
+                        <span className="text-xs text-muted-foreground ml-1">({secondaryStock.toFixed(1)} {item.secondary_unit})</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
-          {selectedItemId && batches && (
+          {selectedItemId && batches && selectedItem && (
             <div className="border rounded-md p-2 space-y-2">
-              <div className="text-sm font-medium">Select Batch:</div>
+              <div className="flex justify-between items-center">
+                <div className="text-sm font-medium">Select Batch for: {selectedItem.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {selectedItem.primary_unit}{selectedItem.secondary_unit && ` / ${selectedItem.secondary_unit}`}
+                  {selectedItem.conversion_factor && selectedItem.conversion_factor !== 1 && (
+                    <span className="ml-1">(1:{selectedItem.conversion_factor})</span>
+                  )}
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2">
-                {batches.filter(b => b.remaining_quantity > 0).map(batch => (
-                  <Button key={batch.id} variant="outline" size="sm" className="text-xs" onClick={() => selectBatch(batch)}>
-                    {batch.batch_name.split('/')[0]} - {batch.remaining_quantity} @ ₹{batch.selling_price}
-                  </Button>
-                ))}
+                {batches.filter(b => b.remaining_quantity > 0).map(batch => {
+                  const secondaryRemaining = selectedItem.conversion_factor && selectedItem.secondary_unit
+                    ? batch.remaining_quantity * selectedItem.conversion_factor
+                    : null;
+                  return (
+                    <Button key={batch.id} variant="outline" size="sm" className="text-xs h-auto py-1" onClick={() => selectBatch(batch)}>
+                      <div className="text-left">
+                        <div>{batch.batch_name.split('/')[0]} @ ₹{batch.selling_price}</div>
+                        <div className="text-muted-foreground">
+                          {batch.remaining_quantity} {selectedItem.primary_unit}
+                          {secondaryRemaining !== null && selectedItem.secondary_unit && (
+                            <span> ({secondaryRemaining.toFixed(1)} {selectedItem.secondary_unit})</span>
+                          )}
+                        </div>
+                      </div>
+                    </Button>
+                  );
+                })}
               </div>
             </div>
           )}
 
           {lineItems.length > 0 && (
-            <Table className="data-table">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Batch</TableHead>
-                  <TableHead className="w-20">Qty</TableHead>
-                  <TableHead className="w-24">Rate ₹</TableHead>
-                  <TableHead className="text-right">Total ₹</TableHead>
-                  <TableHead className="w-8"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lineItems.map((item, i) => (
-                  <TableRow key={i}>
-                    <TableCell>{item.item_name}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-xs">{item.batch_name.split('/')[0]}</Badge></TableCell>
-                    <TableCell>
-                      <Input type="number" value={item.quantity_primary} onChange={(e) => updateQuantity(i, parseFloat(e.target.value) || 0)} className="h-7 w-16" />
-                    </TableCell>
-                    <TableCell>
-                      <Input type="number" value={item.rate} onChange={(e) => updateRate(i, parseFloat(e.target.value) || 0)} className="h-7 w-20" />
-                    </TableCell>
-                    <TableCell className="text-right font-mono">₹{item.total.toFixed(2)}</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeItem(i)}><Trash2 className="w-3 h-3" /></Button>
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table className="data-table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead>Batch</TableHead>
+                    <TableHead className="w-24">Qty (Primary)</TableHead>
+                    <TableHead className="w-24">Qty (Secondary)</TableHead>
+                    <TableHead className="w-24">Rate ₹</TableHead>
+                    <TableHead className="text-right">Total ₹</TableHead>
+                    <TableHead className="w-8"></TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {lineItems.map((item, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <div>
+                          {item.item_name}
+                          <div className="text-xs text-muted-foreground">
+                            {item.primary_unit}{item.secondary_unit && ` / ${item.secondary_unit}`}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs">{item.batch_name.split('/')[0]}</Badge></TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Input 
+                            type="number" 
+                            step="0.01"
+                            value={item.quantity_primary} 
+                            onChange={(e) => updatePrimaryQuantity(i, parseFloat(e.target.value) || 0)} 
+                            className="h-7 w-16" 
+                          />
+                          <span className="text-xs text-muted-foreground">{item.primary_unit}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {item.secondary_unit && item.conversion_factor ? (
+                          <div className="flex items-center gap-1">
+                            <Input 
+                              type="number" 
+                              step="0.01"
+                              value={item.quantity_secondary?.toFixed(2) || ''} 
+                              onChange={(e) => updateSecondaryQuantity(i, parseFloat(e.target.value) || 0)} 
+                              className="h-7 w-16" 
+                            />
+                            <span className="text-xs text-muted-foreground">{item.secondary_unit}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">N/A</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Input type="number" value={item.rate} onChange={(e) => updateRate(i, parseFloat(e.target.value) || 0)} className="h-7 w-20" />
+                      </TableCell>
+                      <TableCell className="text-right font-mono">₹{item.total.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeItem(i)}><Trash2 className="w-3 h-3" /></Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -243,22 +355,45 @@ function SalesHistory() {
         </Table>
       </div>
       <Dialog open={!!viewSale} onOpenChange={(o) => !o && setViewSale(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader><DialogTitle>Sale {viewSale?.sale_number}</DialogTitle></DialogHeader>
           <Table className="data-table">
-            <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Batch</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Rate</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead>Batch</TableHead>
+                <TableHead className="text-right">Qty (Primary)</TableHead>
+                <TableHead className="text-right">Qty (Secondary)</TableHead>
+                <TableHead className="text-right">Rate</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {viewSale?.sale_items.map(si => (
                 <TableRow key={si.id}>
-                  <TableCell>{si.items?.name}</TableCell>
+                  <TableCell>
+                    <div>
+                      {si.items?.name}
+                      <div className="text-xs text-muted-foreground">
+                        {si.items?.primary_unit}{si.items?.secondary_unit && ` / ${si.items.secondary_unit}`}
+                      </div>
+                    </div>
+                  </TableCell>
                   <TableCell><Badge variant="outline">{si.batches?.batch_name.split('/')[0]}</Badge></TableCell>
-                  <TableCell className="text-right">{si.quantity_primary}</TableCell>
+                  <TableCell className="text-right">{si.quantity_primary} {si.items?.primary_unit}</TableCell>
+                  <TableCell className="text-right">
+                    {si.quantity_secondary ? `${si.quantity_secondary} ${si.items?.secondary_unit || ''}` : '-'}
+                  </TableCell>
                   <TableCell className="text-right">₹{si.rate}</TableCell>
                   <TableCell className="text-right font-medium">₹{si.total}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          <div className="flex justify-between p-3 bg-muted rounded-md">
+            <span>Total Amount</span>
+            <span className="font-bold">₹{viewSale?.total_amount}</span>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
