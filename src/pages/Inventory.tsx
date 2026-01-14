@@ -12,6 +12,14 @@ import { useCategories } from '@/hooks/useCategories';
 import { Search, Package, Plus, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 
+function formatDualStock(primary: number, primaryUnit: string, conversionFactor: number | null, secondaryUnit: string | null): string {
+  if (!conversionFactor || !secondaryUnit || conversionFactor === 0) {
+    return `${primary.toFixed(2)} ${primaryUnit}`;
+  }
+  const secondary = primary * conversionFactor;
+  return `${primary.toFixed(2)} ${primaryUnit} (${secondary.toFixed(1)} ${secondaryUnit})`;
+}
+
 function BatchBreakdown({ item }: { item: ItemWithCategory }) {
   const { data: batches } = useBatchesByItem(item.id);
   
@@ -19,17 +27,30 @@ function BatchBreakdown({ item }: { item: ItemWithCategory }) {
     return <span className="text-muted-foreground text-xs">No batches</span>;
   }
   
+  const conversionFactor = item.conversion_factor || null;
+  const secondaryUnit = item.secondary_unit || null;
+  
   return (
     <div className="flex flex-wrap gap-1">
-      {batches.filter(b => b.remaining_quantity > 0).map((batch) => (
-        <Badge 
-          key={batch.id} 
-          variant="outline" 
-          className="text-[10px] px-1.5 py-0 font-mono"
-        >
-          {batch.batch_name.split('/')[0]}/{batch.is_opening_stock ? 'Op' : format(new Date(batch.batch_date), 'dd-MMM')} - {batch.remaining_quantity}
-        </Badge>
-      ))}
+      {batches.filter(b => b.remaining_quantity > 0).map((batch) => {
+        const primaryQty = batch.remaining_quantity;
+        const secondaryQty = conversionFactor ? primaryQty * conversionFactor : null;
+        
+        return (
+          <Badge 
+            key={batch.id} 
+            variant="outline" 
+            className="text-[10px] px-1.5 py-0 font-mono"
+            title={`Purchase: ₹${batch.purchase_price} | Selling: ₹${batch.selling_price}`}
+          >
+            {batch.batch_name.split('/')[0]}/{batch.is_opening_stock ? 'Op' : format(new Date(batch.batch_date), 'dd-MMM')} 
+            : {primaryQty} {item.primary_unit}
+            {secondaryQty !== null && secondaryUnit && (
+              <span className="text-muted-foreground"> ({secondaryQty.toFixed(1)} {secondaryUnit})</span>
+            )}
+          </Badge>
+        );
+      })}
     </div>
   );
 }
@@ -165,6 +186,7 @@ export default function Inventory() {
               <TableHead className="w-20">Code</TableHead>
               <TableHead>Item</TableHead>
               <TableHead>Category</TableHead>
+              <TableHead>Unit Type</TableHead>
               <TableHead className="text-right">Total Stock</TableHead>
               <TableHead>Batch Breakdown</TableHead>
               <TableHead>Status</TableHead>
@@ -174,17 +196,22 @@ export default function Inventory() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Loading inventory...</TableCell>
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">Loading inventory...</TableCell>
               </TableRow>
             ) : filteredItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   No items found.
                 </TableCell>
               </TableRow>
             ) : (
               filteredItems.map((item) => {
                 const status = getStockStatus(item);
+                const totalStock = item.total_stock || 0;
+                const conversionFactor = item.conversion_factor || null;
+                const secondaryUnit = item.secondary_unit || null;
+                const secondaryStock = conversionFactor && secondaryUnit ? totalStock * conversionFactor : null;
+                
                 return (
                   <TableRow key={item.id}>
                     <TableCell className="font-mono text-xs">{item.item_code}</TableCell>
@@ -194,9 +221,22 @@ export default function Inventory() {
                         <Badge variant="secondary" className="text-xs">{item.categories.name}</Badge>
                       ) : '-'}
                     </TableCell>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">
+                        {item.unit_type === 'piece' ? 'Piece Only' : 
+                         item.unit_type === 'kg_number' ? 'Kg - Pcs' : 'SqFt - Pcs'}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-right">
-                      <span className="font-bold">{item.total_stock || 0}</span>
-                      <span className="text-muted-foreground ml-1">{item.primary_unit}</span>
+                      <div>
+                        <span className="font-bold">{totalStock.toFixed(2)}</span>
+                        <span className="text-muted-foreground ml-1">{item.primary_unit}</span>
+                      </div>
+                      {secondaryStock !== null && secondaryUnit && (
+                        <div className="text-xs text-muted-foreground">
+                          ({secondaryStock.toFixed(1)} {secondaryUnit})
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       <BatchBreakdown item={item} />

@@ -7,18 +7,28 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useItems } from '@/hooks/useItems';
+import { useItems, type ItemWithCategory } from '@/hooks/useItems';
 import { useSuppliers } from '@/hooks/useSuppliers';
-import { useCreatePurchase, type PurchaseLineItem } from '@/hooks/usePurchases';
+import { useCreatePurchase } from '@/hooks/usePurchases';
 import { format } from 'date-fns';
-import { ArrowLeft, Plus, Trash2, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, RefreshCw } from 'lucide-react';
+
+interface PurchaseLineItemWithUnits {
+  item_id: string;
+  item: ItemWithCategory;
+  quantity_primary: number;
+  quantity_secondary: number | null;
+  purchase_price: number;
+  selling_price: number;
+  total: number;
+}
 
 export function PurchaseForm() {
   const navigate = useNavigate();
   const [supplierId, setSupplierId] = useState<string>('');
   const [purchaseDate, setPurchaseDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [notes, setNotes] = useState('');
-  const [lineItems, setLineItems] = useState<PurchaseLineItem[]>([]);
+  const [lineItems, setLineItems] = useState<PurchaseLineItemWithUnits[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
 
   const { data: items } = useItems();
@@ -38,9 +48,9 @@ export function PurchaseForm() {
     
     setLineItems([...lineItems, {
       item_id: item.id,
-      item_name: item.name,
-      item_code: item.item_code,
-      quantity: 0,
+      item: item,
+      quantity_primary: 0,
+      quantity_secondary: item.unit_type !== 'piece' && item.conversion_factor ? 0 : null,
       purchase_price: 0,
       selling_price: item.current_selling_price,
       total: 0,
@@ -48,10 +58,40 @@ export function PurchaseForm() {
     setSelectedItemId('');
   };
 
-  const updateLineItem = (index: number, field: keyof PurchaseLineItem, value: number) => {
+  const updatePrimaryQuantity = (index: number, value: number) => {
     const updated = [...lineItems];
-    updated[index] = { ...updated[index], [field]: value };
-    updated[index].total = updated[index].quantity * updated[index].purchase_price;
+    const lineItem = updated[index];
+    lineItem.quantity_primary = value;
+    
+    // Auto-calculate secondary if applicable
+    if (lineItem.item.unit_type !== 'piece' && lineItem.item.conversion_factor) {
+      lineItem.quantity_secondary = value * lineItem.item.conversion_factor;
+    }
+    
+    lineItem.total = value * lineItem.purchase_price;
+    setLineItems(updated);
+  };
+
+  const updateSecondaryQuantity = (index: number, value: number) => {
+    const updated = [...lineItems];
+    const lineItem = updated[index];
+    lineItem.quantity_secondary = value;
+    
+    // Auto-calculate primary from secondary
+    if (lineItem.item.conversion_factor && lineItem.item.conversion_factor !== 0) {
+      lineItem.quantity_primary = value / lineItem.item.conversion_factor;
+      lineItem.total = lineItem.quantity_primary * lineItem.purchase_price;
+    }
+    
+    setLineItems(updated);
+  };
+
+  const updatePrice = (index: number, field: 'purchase_price' | 'selling_price', value: number) => {
+    const updated = [...lineItems];
+    updated[index][field] = value;
+    if (field === 'purchase_price') {
+      updated[index].total = updated[index].quantity_primary * value;
+    }
     setLineItems(updated);
   };
 
@@ -68,7 +108,17 @@ export function PurchaseForm() {
       supplier_id: supplierId || null,
       purchase_date: purchaseDate,
       notes,
-      items: lineItems.filter(li => li.quantity > 0),
+      items: lineItems
+        .filter(li => li.quantity_primary > 0)
+        .map(li => ({
+          item_id: li.item_id,
+          item_name: li.item.name,
+          item_code: li.item.item_code,
+          quantity: li.quantity_primary,
+          purchase_price: li.purchase_price,
+          selling_price: li.selling_price,
+          total: li.total,
+        })),
     });
     
     navigate('/purchases');
@@ -141,7 +191,7 @@ export function PurchaseForm() {
                 <SelectContent>
                   {items?.filter(i => !lineItems.some(li => li.item_id === i.id)).map((item) => (
                     <SelectItem key={item.id} value={item.id}>
-                      {item.item_code} - {item.name}
+                      {item.item_code} - {item.name} ({item.primary_unit}{item.secondary_unit ? `/${item.secondary_unit}` : ''})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -154,12 +204,13 @@ export function PurchaseForm() {
 
             {/* Items Table */}
             {lineItems.length > 0 && (
-              <div className="border rounded-md">
+              <div className="border rounded-md overflow-x-auto">
                 <Table className="data-table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Item</TableHead>
-                      <TableHead className="w-24">Qty</TableHead>
+                      <TableHead className="w-28">Qty (Primary)</TableHead>
+                      <TableHead className="w-28">Qty (Secondary)</TableHead>
                       <TableHead className="w-28">Purchase ₹</TableHead>
                       <TableHead className="w-28">Selling ₹</TableHead>
                       <TableHead className="w-28 text-right">Total ₹</TableHead>
@@ -167,29 +218,55 @@ export function PurchaseForm() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {lineItems.map((item, index) => (
-                      <TableRow key={item.item_id}>
+                    {lineItems.map((lineItem, index) => (
+                      <TableRow key={lineItem.item_id}>
                         <TableCell>
                           <div>
-                            <span className="font-mono text-xs text-muted-foreground">{item.item_code}</span>
-                            <span className="ml-2">{item.item_name}</span>
+                            <span className="font-mono text-xs text-muted-foreground">{lineItem.item.item_code}</span>
+                            <span className="ml-2">{lineItem.item.name}</span>
+                            <div className="text-xs text-muted-foreground">
+                              {lineItem.item.primary_unit}
+                              {lineItem.item.secondary_unit && ` / ${lineItem.item.secondary_unit}`}
+                              {lineItem.item.conversion_factor && lineItem.item.conversion_factor !== 1 && (
+                                <span className="ml-1">(1:{lineItem.item.conversion_factor})</span>
+                              )}
+                            </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={item.quantity || ''}
-                            onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                            className="h-7 text-sm w-20"
-                          />
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={lineItem.quantity_primary || ''}
+                              onChange={(e) => updatePrimaryQuantity(index, parseFloat(e.target.value) || 0)}
+                              className="h-7 text-sm w-20"
+                            />
+                            <span className="text-xs text-muted-foreground">{lineItem.item.primary_unit}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {lineItem.item.unit_type !== 'piece' && lineItem.item.secondary_unit ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={lineItem.quantity_secondary?.toFixed(2) || ''}
+                                onChange={(e) => updateSecondaryQuantity(index, parseFloat(e.target.value) || 0)}
+                                className="h-7 text-sm w-20"
+                              />
+                              <span className="text-xs text-muted-foreground">{lineItem.item.secondary_unit}</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">N/A</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Input
                             type="number"
                             step="0.01"
-                            value={item.purchase_price || ''}
-                            onChange={(e) => updateLineItem(index, 'purchase_price', parseFloat(e.target.value) || 0)}
+                            value={lineItem.purchase_price || ''}
+                            onChange={(e) => updatePrice(index, 'purchase_price', parseFloat(e.target.value) || 0)}
                             className="h-7 text-sm w-24"
                           />
                         </TableCell>
@@ -197,13 +274,13 @@ export function PurchaseForm() {
                           <Input
                             type="number"
                             step="0.01"
-                            value={item.selling_price || ''}
-                            onChange={(e) => updateLineItem(index, 'selling_price', parseFloat(e.target.value) || 0)}
+                            value={lineItem.selling_price || ''}
+                            onChange={(e) => updatePrice(index, 'selling_price', parseFloat(e.target.value) || 0)}
                             className="h-7 text-sm w-24"
                           />
                         </TableCell>
                         <TableCell className="text-right font-mono">
-                          ₹{item.total.toFixed(2)}
+                          ₹{lineItem.total.toFixed(2)}
                         </TableCell>
                         <TableCell>
                           <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeLineItem(index)}>
