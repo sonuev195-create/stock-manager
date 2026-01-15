@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useBulkCreateItems, type ItemInsert } from '@/hooks/useItems';
 import { useCategories } from '@/hooks/useCategories';
-import { Upload, FileDown, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Upload, FileDown, AlertCircle, CheckCircle2, ClipboardPaste } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
 type UnitType = Database['public']['Enums']['unit_type'];
@@ -39,10 +40,15 @@ export function BulkUploadDialog() {
     return 'piece';
   };
 
-  const handleParse = () => {
-    const lines = bulkText.split('\n').filter(line => line.trim());
+  // Parse text (handles both CSV and tab-separated from Excel/Sheets)
+  const parseText = (text: string) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    
     const items: ParsedItem[] = lines.map((line, index) => {
-      const parts = line.split(',').map(s => s.trim());
+      // Detect if it's tab-separated (Excel/Sheets paste) or comma-separated
+      const isTabSeparated = line.includes('\t');
+      const separator = isTabSeparated ? '\t' : ',';
+      const parts = line.split(separator).map(s => s.trim().replace(/^"|"$/g, ''));
       
       if (parts.length < 2) {
         return {
@@ -81,9 +87,32 @@ export function BulkUploadDialog() {
       };
     });
 
+    return items;
+  };
+
+  const handleParse = () => {
+    const items = parseText(bulkText);
     setParsedItems(items);
     setStep('preview');
   };
+
+  // Handle paste from clipboard (Excel/Sheets support)
+  const handlePaste = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setBulkText(text);
+      // Auto-parse if it looks like valid data
+      if (text.includes('\t') || text.includes(',')) {
+        const items = parseText(text);
+        if (items.length > 0 && items.some(i => i.isValid)) {
+          setParsedItems(items);
+          setStep('preview');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to read clipboard:', err);
+    }
+  }, []);
 
   const handleUpload = async () => {
     const validItems = parsedItems.filter(item => item.isValid);
@@ -110,6 +139,15 @@ export function BulkUploadDialog() {
     setBulkText('');
     setParsedItems([]);
     setStep('input');
+  };
+
+  const updateParsedItem = (index: number, field: keyof ParsedItem, value: any) => {
+    const updated = [...parsedItems];
+    (updated[index] as any)[field] = value;
+    // Revalidate
+    updated[index].isValid = !!(updated[index].item_code && updated[index].name);
+    updated[index].error = updated[index].isValid ? undefined : 'Missing required fields';
+    setParsedItems(updated);
   };
 
   const downloadTemplate = () => {
@@ -147,23 +185,31 @@ ITM003,Cement Bag,Building,piece,pcs,,1,380`;
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground">
-                Paste your items data below (CSV format)
+                Paste data from Excel/Google Sheets or enter CSV format
               </p>
-              <Button variant="outline" size="sm" className="h-7 gap-1" onClick={downloadTemplate}>
-                <FileDown className="w-3 h-3" /> Download Template
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="h-7 gap-1" onClick={handlePaste}>
+                  <ClipboardPaste className="w-3 h-3" /> Paste from Clipboard
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 gap-1" onClick={downloadTemplate}>
+                  <FileDown className="w-3 h-3" /> Download Template
+                </Button>
+              </div>
             </div>
             
             <Textarea
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
-              placeholder={`Item Code,Name,Category,Unit Type,Primary Unit,Secondary Unit,Conversion Factor,Selling Price
+              placeholder={`Paste from Excel/Sheets (tab-separated) or CSV format:
+
+Item Code,Name,Category,Unit Type,Primary Unit,Secondary Unit,Conversion Factor,Selling Price
 ITM001,Rice Basmati,Groceries,kg_number,kg,pcs,1,120
 ITM002,Tiles 2x2,Building,sqft_number,sqft,pcs,4,45`}
               className="min-h-[200px] text-sm font-mono"
             />
             
-            <div className="text-xs text-muted-foreground">
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p><strong>Supports:</strong> Copy-paste from Excel, Google Sheets, or CSV files</p>
               <p><strong>Format:</strong> Item Code, Name, Category, Unit Type, Primary Unit, Secondary Unit, Conversion Factor, Selling Price</p>
               <p><strong>Unit Types:</strong> piece, kg_number, sqft_number</p>
             </div>
@@ -212,11 +258,36 @@ ITM002,Tiles 2x2,Building,sqft_number,sqft,pcs,4,45`}
                           <AlertCircle className="w-3.5 h-3.5 text-destructive" />
                         )}
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{item.item_code}</TableCell>
-                      <TableCell>{item.name || <span className="text-destructive">Missing</span>}</TableCell>
-                      <TableCell className="text-muted-foreground">{item.category_name || '-'}</TableCell>
+                      <TableCell>
+                        <Input
+                          value={item.item_code}
+                          onChange={(e) => updateParsedItem(index, 'item_code', e.target.value)}
+                          className="h-6 text-xs font-mono w-24"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={item.name}
+                          onChange={(e) => updateParsedItem(index, 'name', e.target.value)}
+                          className="h-6 text-xs w-40"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={item.category_name}
+                          onChange={(e) => updateParsedItem(index, 'category_name', e.target.value)}
+                          className="h-6 text-xs w-28"
+                        />
+                      </TableCell>
                       <TableCell className="text-xs">{item.unit_type}</TableCell>
-                      <TableCell>₹{item.current_selling_price}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={item.current_selling_price}
+                          onChange={(e) => updateParsedItem(index, 'current_selling_price', parseFloat(e.target.value) || 0)}
+                          className="h-6 text-xs w-20"
+                        />
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
