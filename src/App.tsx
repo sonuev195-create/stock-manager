@@ -14,6 +14,8 @@ import Suppliers from "./pages/Suppliers";
 import Purchases from "./pages/Purchases";
 import { PurchaseForm } from "./components/purchases/PurchaseForm";
 import Sales from "./pages/Sales";
+import Bills from "./pages/Bills";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,13 +37,13 @@ function AppRoutes() {
       <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Auth />} />
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
-      <Route path="/bills" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
+      <Route path="/bills" element={<ProtectedRoute><Bills /></ProtectedRoute>} />
       <Route path="/items" element={<ProtectedRoute><Items /></ProtectedRoute>} />
       <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
       <Route path="/suppliers" element={<ProtectedRoute><Suppliers /></ProtectedRoute>} />
       <Route path="/purchases" element={<ProtectedRoute><Purchases /></ProtectedRoute>} />
       <Route path="/purchases/new" element={<ProtectedRoute><PurchaseForm /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><div className="text-muted-foreground">Settings coming soon...</div></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/install" element={<ProtectedRoute><Install /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

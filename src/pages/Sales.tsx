@@ -12,7 +12,8 @@ import { useItems, type ItemWithCategory } from '@/hooks/useItems';
 import { useBatchesByItem, type Batch } from '@/hooks/useBatches';
 import { useSales, useCreateSale, type SaleLineItem, type SaleWithDetails } from '@/hooks/useSales';
 import { format } from 'date-fns';
-import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, RefreshCw } from 'lucide-react';
+import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, RefreshCw, Upload } from 'lucide-react';
+import { BulkSaleUploadDialog } from '@/components/sales/BulkSaleUploadDialog';
 
 interface SaleLineItemWithUnits extends SaleLineItem {
   primary_unit: string;
@@ -401,14 +402,24 @@ function SalesHistory() {
 }
 
 export default function Sales() {
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+  
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Sales</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Sales</h1>
+        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => setShowBulkUpload(true)}>
+          <Upload className="w-3.5 h-3.5" />
+          Bulk Upload Bills
+        </Button>
+      </div>
       <Tabs defaultValue="quick">
         <TabsList><TabsTrigger value="quick">Quick Sale</TabsTrigger><TabsTrigger value="history">History</TabsTrigger></TabsList>
         <TabsContent value="quick" className="mt-4"><QuickSale /></TabsContent>
         <TabsContent value="history" className="mt-4"><SalesHistory /></TabsContent>
       </Tabs>
+      
+      <BulkSaleUploadDialog open={showBulkUpload} onOpenChange={setShowBulkUpload} />
     </div>
   );
 }

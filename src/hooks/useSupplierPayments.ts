@@ -1,6 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 
 export interface SupplierWithDetails {
   id: string;
@@ -10,6 +9,7 @@ export interface SupplierWithDetails {
   email: string | null;
   address: string | null;
   gst_number: string | null;
+  payment_type: string;
   created_at: string;
   updated_at: string;
   total_purchases: number;
@@ -49,21 +49,32 @@ export function useSupplierWithDetails(supplierId: string | null) {
       
       if (purchasesError) throw purchasesError;
       
-      // Calculate totals (assuming all purchases are paid for now - payment tracking would need a separate table)
+      // Get payments for this supplier
+      const { data: payments, error: paymentsError } = await supabase
+        .from('supplier_payments')
+        .select('amount')
+        .eq('supplier_id', supplierId);
+      
+      if (paymentsError) throw paymentsError;
+      
+      // Calculate totals
       const totalPurchases = purchases.reduce((sum, p) => sum + p.total_amount, 0);
+      const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+      const dueAmount = totalPurchases - totalPaid;
       
       return {
         ...supplier,
+        payment_type: supplier.payment_type || 'bill-wise',
         total_purchases: totalPurchases,
-        total_paid: totalPurchases, // Placeholder - needs payment tracking
-        due_amount: 0, // Placeholder - needs payment tracking
+        total_paid: totalPaid,
+        due_amount: dueAmount,
         purchases: purchases.map(p => ({
           id: p.id,
           purchase_number: p.purchase_number,
           purchase_date: p.purchase_date,
           total_amount: p.total_amount,
-          paid_amount: p.total_amount, // Placeholder
-          due_amount: 0, // Placeholder
+          paid_amount: p.paid_amount || 0,
+          due_amount: p.total_amount - (p.paid_amount || 0),
         })),
       } as SupplierWithDetails;
     },
@@ -89,6 +100,13 @@ export function useSuppliersWithTotals() {
       
       if (purchasesError) throw purchasesError;
       
+      // Get payments for all suppliers
+      const { data: payments, error: paymentsError } = await supabase
+        .from('supplier_payments')
+        .select('supplier_id, amount');
+      
+      if (paymentsError) throw paymentsError;
+      
       // Calculate totals per supplier
       const purchaseTotals: Record<string, number> = {};
       purchases.forEach(p => {
@@ -97,10 +115,18 @@ export function useSuppliersWithTotals() {
         }
       });
       
+      const paymentTotals: Record<string, number> = {};
+      payments.forEach(p => {
+        if (p.supplier_id) {
+          paymentTotals[p.supplier_id] = (paymentTotals[p.supplier_id] || 0) + p.amount;
+        }
+      });
+      
       return suppliers.map(s => ({
         ...s,
         total_purchases: purchaseTotals[s.id] || 0,
-        due_amount: 0, // Placeholder - needs payment tracking
+        total_paid: paymentTotals[s.id] || 0,
+        due_amount: (purchaseTotals[s.id] || 0) - (paymentTotals[s.id] || 0),
       }));
     },
   });
