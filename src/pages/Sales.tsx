@@ -51,8 +51,9 @@ function QuickSale() {
     const item = items?.find(i => i.id === selectedItemId);
     if (!item || batch.remaining_quantity <= 0) return;
 
-    const conversionFactor = item.conversion_factor || null;
-    const secondaryQty = conversionFactor ? 1 * conversionFactor : null;
+    // Use batch-specific conversion factor if available, otherwise fall back to item default
+    const effectiveConversionFactor = (batch as any).batch_conversion_factor ?? item.conversion_factor ?? null;
+    const secondaryQty = effectiveConversionFactor ? 1 * effectiveConversionFactor : null;
 
     setLineItems([...lineItems, {
       item_id: item.id,
@@ -67,7 +68,7 @@ function QuickSale() {
       profit: batch.selling_price - batch.purchase_price,
       primary_unit: item.primary_unit,
       secondary_unit: item.secondary_unit || null,
-      conversion_factor: conversionFactor,
+      conversion_factor: effectiveConversionFactor, // Use batch-specific conversion
     }]);
     setSelectedItemId('');
     setSearch('');
@@ -196,8 +197,10 @@ function QuickSale() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {batches.filter(b => b.remaining_quantity > 0).map(batch => {
-                  const secondaryRemaining = selectedItem.conversion_factor && selectedItem.secondary_unit
-                    ? batch.remaining_quantity * selectedItem.conversion_factor
+                  // Use batch-specific conversion if available
+                  const effectiveConversion = (batch as any).batch_conversion_factor ?? selectedItem.conversion_factor ?? null;
+                  const secondaryRemaining = effectiveConversion && selectedItem.secondary_unit
+                    ? batch.remaining_quantity * effectiveConversion
                     : null;
                   return (
                     <Button key={batch.id} variant="outline" size="sm" className="text-xs h-auto py-1" onClick={() => selectBatch(batch)}>
@@ -207,6 +210,9 @@ function QuickSale() {
                           {batch.remaining_quantity} {selectedItem.primary_unit}
                           {secondaryRemaining !== null && selectedItem.secondary_unit && (
                             <span> ({secondaryRemaining.toFixed(1)} {selectedItem.secondary_unit})</span>
+                          )}
+                          {effectiveConversion && effectiveConversion !== selectedItem.conversion_factor && (
+                            <span className="ml-1 text-blue-400">[1:{effectiveConversion.toFixed(1)}]</span>
                           )}
                         </div>
                       </div>

@@ -19,6 +19,8 @@ export interface PurchaseLineItem {
   item_name: string;
   item_code: string;
   quantity: number;
+  quantity_secondary?: number | null;
+  batch_conversion_factor?: number | null;
   purchase_price: number;
   selling_price: number;
   total: number;
@@ -58,12 +60,22 @@ export function useCreatePurchase() {
   
   return useMutation({
     mutationFn: async (purchaseData: CreatePurchaseData) => {
-      // Generate purchase number
-      const { count } = await supabase
+      // Generate purchase number using MAX to avoid conflicts after deletion
+      const { data: maxPurchase } = await supabase
         .from('purchases')
-        .select('*', { count: 'exact', head: true });
+        .select('purchase_number')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       
-      const purchaseNumber = `PUR-${String((count || 0) + 1).padStart(5, '0')}`;
+      let nextNumber = 1;
+      if (maxPurchase?.purchase_number) {
+        const match = maxPurchase.purchase_number.match(/PUR-(\d+)/);
+        if (match) {
+          nextNumber = parseInt(match[1], 10) + 1;
+        }
+      }
+      const purchaseNumber = `PUR-${String(nextNumber).padStart(5, '0')}`;
       const totalAmount = purchaseData.items.reduce((sum, item) => sum + item.total, 0);
       
       // Create purchase
@@ -93,7 +105,7 @@ export function useCreatePurchase() {
         const dateStr = format(new Date(purchaseData.purchase_date), 'dd-MMM-yy');
         const batchName = `${String(serialNumber).padStart(3, '0')}/${dateStr}/${item.quantity}*${item.purchase_price}`;
         
-        // Create batch
+        // Create batch with batch-specific conversion factor
         const { data: batch, error: batchError } = await supabase
           .from('batches')
           .insert({
@@ -106,6 +118,7 @@ export function useCreatePurchase() {
             purchase_price: item.purchase_price,
             selling_price: item.selling_price,
             is_opening_stock: false,
+            batch_conversion_factor: item.batch_conversion_factor || null,
           })
           .select()
           .single();

@@ -66,12 +66,22 @@ export function useCreateSale() {
   
   return useMutation({
     mutationFn: async (saleData: CreateSaleData) => {
-      // Generate sale number
-      const { count } = await supabase
+      // Generate sale number using MAX to avoid conflicts after deletion
+      const { data: maxSale } = await supabase
         .from('sales')
-        .select('*', { count: 'exact', head: true });
+        .select('sale_number')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
       
-      const saleNumber = `INV-${String((count || 0) + 1).padStart(5, '0')}`;
+      let nextNumber = 1;
+      if (maxSale?.sale_number) {
+        const match = maxSale.sale_number.match(/INV-(\d+)/);
+        if (match) {
+          nextNumber = parseInt(match[1], 10) + 1;
+        }
+      }
+      const saleNumber = `INV-${String(nextNumber).padStart(5, '0')}`;
       const totalProfit = saleData.items.reduce((sum, item) => sum + item.profit, 0);
       
       // Create sale
