@@ -8,10 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useItems } from '@/hooks/useItems';
+import { useItems, type ItemWithCategory } from '@/hooks/useItems';
 import { useAllBatches } from '@/hooks/useBatches';
 import { useCreateSale } from '@/hooks/useSales';
-import { Upload, Trash2, Plus, FileSpreadsheet, ClipboardPaste } from 'lucide-react';
+import { findBestMatch } from '@/lib/fuzzyMatch';
+import { Upload, Trash2, Plus, FileSpreadsheet, ClipboardPaste, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface BulkSaleUploadDialogProps {
@@ -102,11 +103,16 @@ export function BulkSaleUploadDialog({ open, onOpenChange }: BulkSaleUploadDialo
         const qtySecondary = cells[2] ? parseFloat(cells[2]) : null;
         const rate = parseFloat(cells[3]) || 0;
 
-        // Find matching item
-        const item = items?.find(i => 
-          i.item_code.toLowerCase() === itemCode.toLowerCase() || 
-          i.name.toLowerCase() === itemCode.toLowerCase()
+        // Find matching item using fuzzy matching
+        const matchResult = findBestMatch(
+          itemCode,
+          items || [],
+          (item) => [item.item_code, item.name]
         );
+        
+        const item = matchResult?.item;
+        const matchConfidence = matchResult?.score || 0;
+        const matchType = matchResult?.matchType;
 
         // Find available batch (LIFO - most recent first)
         const availableBatch = item ? batches?.filter(b => 

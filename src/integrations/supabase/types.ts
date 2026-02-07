@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       batches: {
         Row: {
+          batch_conversion_factor: number | null
           batch_date: string
           batch_name: string
           created_at: string
@@ -30,6 +31,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          batch_conversion_factor?: number | null
           batch_date?: string
           batch_name: string
           created_at?: string
@@ -44,6 +46,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          batch_conversion_factor?: number | null
           batch_date?: string
           batch_name?: string
           created_at?: string

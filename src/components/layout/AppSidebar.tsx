@@ -1,4 +1,4 @@
-import { Home, ShoppingCart, FileText, Package, Boxes, Truck, Settings, Download, LogOut } from 'lucide-react';
+import { Home, ShoppingCart, FileText, Package, Boxes, Truck, Settings, Download, LogOut, Receipt } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 const mainItems = [
   { title: 'Dashboard', url: '/', icon: Home },
   { title: 'Sales', url: '/sales', icon: ShoppingCart },
-  { title: 'Bills', url: '/bills', icon: FileText },
+  { title: 'Bills', url: '/bills', icon: Receipt },
 ];
 
 const inventoryItems = [

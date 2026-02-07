@@ -63,7 +63,13 @@ export function useBatchesWithStock() {
         .order('serial_number', { ascending: false });
       
       if (error) throw error;
-      return data;
+      
+      // Map batches to include effective conversion factor
+      return data.map(batch => ({
+        ...batch,
+        // Use batch-specific conversion factor if available, otherwise fall back to item's default
+        effective_conversion_factor: (batch as any).batch_conversion_factor ?? batch.items?.conversion_factor ?? null
+      }));
     },
   });
 }
