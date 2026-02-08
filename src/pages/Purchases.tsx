@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { usePurchases, useDeletePurchase, type PurchaseWithDetails } from '@/hooks/usePurchases';
 import { format } from 'date-fns';
-import { Search, Plus, Trash2, Eye, Package } from 'lucide-react';
+import { Search, Plus, Trash2, Eye, Package, Edit2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 function PurchaseDetailsDialog({ purchase, open, onOpenChange }: { purchase: PurchaseWithDetails | null; open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -160,6 +160,9 @@ export default function Purchases() {
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewPurchase(purchase)}>
                         <Eye className="w-3 h-3" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigate(`/purchases/${purchase.id}/edit`)}>
+                        <Edit2 className="w-3 h-3" />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setDeletePurchase(purchase)}>
                         <Trash2 className="w-3 h-3" />

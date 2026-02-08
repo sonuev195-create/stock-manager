@@ -1,5 +1,5 @@
 import { Home, ShoppingCart, FileText, Package, Boxes, Truck, Settings, Download, LogOut, Receipt } from 'lucide-react';
-import { NavLink } from '@/components/NavLink';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Sidebar,
@@ -12,8 +12,10 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const mainItems = [
   { title: 'Dashboard', url: '/', icon: Home },
@@ -33,8 +35,38 @@ const settingsItems = [
   { title: 'Install App', url: '/install', icon: Download },
 ];
 
+function NavLinkWithCollapse({ item, isMobile, setOpenMobile }: { 
+  item: { title: string; url: string; icon: React.ElementType }; 
+  isMobile: boolean;
+  setOpenMobile: (open: boolean) => void;
+}) {
+  const navigate = useNavigate();
+  
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    navigate(item.url);
+    // Auto-collapse on mobile
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
+  return (
+    <a 
+      href={item.url}
+      onClick={handleClick}
+      className="flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-sidebar-accent"
+    >
+      <item.icon className="w-4 h-4" />
+      <span>{item.title}</span>
+    </a>
+  );
+}
+
 export function AppSidebar() {
   const { signOut } = useAuth();
+  const isMobile = useIsMobile();
+  const { setOpenMobile } = useSidebar();
 
   return (
     <Sidebar className="border-r border-sidebar-border">
@@ -55,10 +87,7 @@ export function AppSidebar() {
               {mainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild size="sm">
-                    <NavLink to={item.url} className="flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
-                      <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
+                    <NavLinkWithCollapse item={item} isMobile={isMobile} setOpenMobile={setOpenMobile} />
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -73,10 +102,7 @@ export function AppSidebar() {
               {inventoryItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild size="sm">
-                    <NavLink to={item.url} className="flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
-                      <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
+                    <NavLinkWithCollapse item={item} isMobile={isMobile} setOpenMobile={setOpenMobile} />
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -91,10 +117,7 @@ export function AppSidebar() {
               {settingsItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild size="sm">
-                    <NavLink to={item.url} className="flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-sidebar-accent" activeClassName="bg-sidebar-accent text-sidebar-primary font-medium">
-                      <item.icon className="w-4 h-4" />
-                      <span>{item.title}</span>
-                    </NavLink>
+                    <NavLinkWithCollapse item={item} isMobile={isMobile} setOpenMobile={setOpenMobile} />
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

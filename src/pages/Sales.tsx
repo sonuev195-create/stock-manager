@@ -12,8 +12,9 @@ import { useItems, type ItemWithCategory } from '@/hooks/useItems';
 import { useBatchesByItem, type Batch } from '@/hooks/useBatches';
 import { useSales, useCreateSale, type SaleLineItem, type SaleWithDetails } from '@/hooks/useSales';
 import { format } from 'date-fns';
-import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, RefreshCw, Upload } from 'lucide-react';
+import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, RefreshCw, Upload, Edit2 } from 'lucide-react';
 import { BulkSaleUploadDialog } from '@/components/sales/BulkSaleUploadDialog';
+import { SimpleBulkUploadDialog } from '@/components/sales/SimpleBulkUploadDialog';
 
 interface SaleLineItemWithUnits extends SaleLineItem {
   primary_unit: string;
@@ -409,15 +410,22 @@ function SalesHistory() {
 
 export default function Sales() {
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [showSimpleBulkUpload, setShowSimpleBulkUpload] = useState(false);
   
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Sales</h1>
-        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => setShowBulkUpload(true)}>
-          <Upload className="w-3.5 h-3.5" />
-          Bulk Upload Bills
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => setShowSimpleBulkUpload(true)}>
+            <Upload className="w-3.5 h-3.5" />
+            Quick Bulk
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => setShowBulkUpload(true)}>
+            <Upload className="w-3.5 h-3.5" />
+            Bulk Upload Bills
+          </Button>
+        </div>
       </div>
       <Tabs defaultValue="quick">
         <TabsList><TabsTrigger value="quick">Quick Sale</TabsTrigger><TabsTrigger value="history">History</TabsTrigger></TabsList>
@@ -426,6 +434,7 @@ export default function Sales() {
       </Tabs>
       
       <BulkSaleUploadDialog open={showBulkUpload} onOpenChange={setShowBulkUpload} />
+      <SimpleBulkUploadDialog open={showSimpleBulkUpload} onOpenChange={setShowSimpleBulkUpload} />
     </div>
   );
 }

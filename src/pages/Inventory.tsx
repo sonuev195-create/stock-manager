@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useItems, type ItemWithCategory } from '@/hooks/useItems';
-import { useBatchesByItem, type Batch } from '@/hooks/useBatches';
+import { type Batch } from '@/hooks/useBatches';
 import { OpeningStockDialog } from '@/components/inventory/OpeningStockDialog';
 import { BatchAdjustDialog } from '@/components/inventory/BatchAdjustDialog';
+import { BatchBreakdown } from '@/components/inventory/BatchBreakdown';
+import { ItemBatchReportDialog } from '@/components/inventory/ItemBatchReportDialog';
 import { ExportButton } from '@/components/common/ExportButton';
 import { INVENTORY_COLUMNS } from '@/lib/exportUtils';
 import { getReportColumns } from '@/hooks/useSettings';
@@ -13,44 +15,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCategories } from '@/hooks/useCategories';
-import { Search, Plus, AlertTriangle, Wrench } from 'lucide-react';
+import { Search, Plus, AlertTriangle, FileText } from 'lucide-react';
 import { format } from 'date-fns';
-
-function BatchBreakdown({ item, onAdjust }: { item: ItemWithCategory; onAdjust: (batch: Batch) => void }) {
-  const { data: batches } = useBatchesByItem(item.id);
-  
-  if (!batches || batches.length === 0) {
-    return <span className="text-muted-foreground text-xs">No batches</span>;
-  }
-  
-  const conversionFactor = item.conversion_factor || null;
-  const secondaryUnit = item.secondary_unit || null;
-  
-  return (
-    <div className="flex flex-wrap gap-1">
-      {batches.filter(b => b.remaining_quantity > 0).map((batch) => {
-        const primaryQty = batch.remaining_quantity;
-        const secondaryQty = conversionFactor ? primaryQty * conversionFactor : null;
-        
-        return (
-          <Badge 
-            key={batch.id} 
-            variant="outline" 
-            className="text-[10px] px-1.5 py-0 font-mono cursor-pointer hover:bg-accent"
-            title={`Click to adjust | Purchase: ₹${batch.purchase_price} | Selling: ₹${batch.selling_price}`}
-            onClick={() => onAdjust(batch)}
-          >
-            {batch.batch_name.split('/')[0]}
-            : {primaryQty} {item.primary_unit}
-            {secondaryQty !== null && secondaryUnit && (
-              <span className="text-muted-foreground"> ({secondaryQty.toFixed(1)} {secondaryUnit})</span>
-            )}
-          </Badge>
-        );
-      })}
-    </div>
-  );
-}
 
 export default function Inventory() {
   const [search, setSearch] = useState('');
@@ -58,6 +24,7 @@ export default function Inventory() {
   const [stockFilter, setStockFilter] = useState<string>('all');
   const [selectedItem, setSelectedItem] = useState<ItemWithCategory | null>(null);
   const [adjustBatch, setAdjustBatch] = useState<{ batch: Batch; item: ItemWithCategory } | null>(null);
+  const [reportItem, setReportItem] = useState<ItemWithCategory | null>(null);
 
   const { data: items, isLoading } = useItems();
   const { data: categories } = useCategories();
@@ -175,7 +142,12 @@ export default function Inventory() {
                     </TableCell>
                     <TableCell><BatchBreakdown item={item} onAdjust={(batch) => setAdjustBatch({ batch, item })} /></TableCell>
                     <TableCell><Badge className={status.class}>{status.label}</Badge></TableCell>
-                    <TableCell><Button variant="ghost" size="sm" className="h-6 gap-1" onClick={() => setSelectedItem(item)}><Plus className="w-3 h-3" />Stock</Button></TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" className="h-6 gap-1" onClick={() => setSelectedItem(item)}><Plus className="w-3 h-3" />Stock</Button>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setReportItem(item)} title="View batch report"><FileText className="w-3 h-3" /></Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })
@@ -201,6 +173,12 @@ export default function Inventory() {
         primaryUnit={adjustBatch?.item.primary_unit}
         secondaryUnit={adjustBatch?.item.secondary_unit}
         conversionFactor={adjustBatch?.item.conversion_factor}
+      />
+
+      <ItemBatchReportDialog
+        item={reportItem}
+        open={!!reportItem}
+        onOpenChange={(o) => !o && setReportItem(null)}
       />
     </div>
   );
