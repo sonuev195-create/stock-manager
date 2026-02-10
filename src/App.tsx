@@ -43,6 +43,7 @@ function AppRoutes() {
       <Route path="/suppliers" element={<ProtectedRoute><Suppliers /></ProtectedRoute>} />
       <Route path="/purchases" element={<ProtectedRoute><Purchases /></ProtectedRoute>} />
       <Route path="/purchases/new" element={<ProtectedRoute><PurchaseForm /></ProtectedRoute>} />
+      <Route path="/purchases/:id/edit" element={<ProtectedRoute><PurchaseForm /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/install" element={<ProtectedRoute><Install /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
