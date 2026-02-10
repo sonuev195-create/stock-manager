@@ -257,6 +257,7 @@ function QuickSale() {
                             step="0.01"
                             value={item.quantity_primary} 
                             onChange={(e) => updatePrimaryQuantity(i, parseFloat(e.target.value) || 0)} 
+                            onDoubleClick={(e) => e.currentTarget.select()}
                             className="h-7 w-16" 
                           />
                           <span className="text-xs text-muted-foreground">{item.primary_unit}</span>
@@ -268,8 +269,9 @@ function QuickSale() {
                             <Input 
                               type="number" 
                               step="0.01"
-                              value={item.quantity_secondary?.toFixed(2) || ''} 
+                              value={item.quantity_secondary != null ? item.quantity_secondary : ''} 
                               onChange={(e) => updateSecondaryQuantity(i, parseFloat(e.target.value) || 0)} 
+                              onDoubleClick={(e) => e.currentTarget.select()}
                               className="h-7 w-16" 
                             />
                             <span className="text-xs text-muted-foreground">{item.secondary_unit}</span>

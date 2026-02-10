@@ -35,6 +35,9 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
   const [parsedLines, setParsedLines] = useState<ParsedLine[]>([]);
   const [step, setStep] = useState<'input' | 'review'>('input');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAddress, setCustomerAddress] = useState('');
 
   const { data: items } = useItems();
   const { data: batches } = useBatchesWithStock();
@@ -49,11 +52,6 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
     const parsed: ParsedLine[] = [];
 
     for (const line of lines) {
-      // Try different formats:
-      // Format 1: "Item Name    Qty    Rate" (tab or multi-space separated)
-      // Format 2: "Item Name, Qty, Rate" (comma separated)
-      // Format 3: "Item Name | Qty | Rate" (pipe separated)
-      
       let parts: string[] = [];
       
       if (line.includes('\t')) {
@@ -63,7 +61,6 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
       } else if (line.includes(',')) {
         parts = line.split(',').map(p => p.trim()).filter(Boolean);
       } else {
-        // Try splitting by multiple spaces
         parts = line.split(/\s{2,}/).map(p => p.trim()).filter(Boolean);
       }
 
@@ -77,16 +74,16 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
           rate: 0,
           total: 0,
           confidence: 0,
-          error: 'Could not parse line. Expected: Item Name, Quantity, Rate'
+          error: 'Could not parse. Expected: Item Name, Quantity, Amount'
         });
         continue;
       }
 
       const itemNamePart = parts[0];
       const qtyPart = parseFloat(parts[1]) || 0;
-      const ratePart = parts.length > 2 ? parseFloat(parts[2]) || 0 : 0;
+      // Third value is now TOTAL AMOUNT (not rate)
+      const amountPart = parts.length > 2 ? parseFloat(parts[2]) || 0 : 0;
 
-      // Find matching item using fuzzy match
       const match = findBestMatch(itemNamePart, itemNames, (item) => [item.name, item.code]);
       
       if (!match || match.score < 0.4) {
@@ -96,8 +93,8 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
           matchedItemName: null,
           matchedBatchId: null,
           quantity: qtyPart,
-          rate: ratePart,
-          total: qtyPart * ratePart,
+          rate: qtyPart > 0 && amountPart > 0 ? amountPart / qtyPart : 0,
+          total: amountPart,
           confidence: match?.score || 0,
           error: 'No matching item found'
         });
@@ -105,10 +102,8 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
       }
 
       const matchedItem = match.item;
-
-      // Find best batch (LIFO - latest batch with stock)
       const itemBatches = batches.filter(b => b.item_id === matchedItem.id && b.remaining_quantity > 0);
-      const bestBatch = itemBatches[0]; // Already sorted by serial_number desc
+      const bestBatch = itemBatches[0];
 
       if (!bestBatch) {
         parsed.push({
@@ -117,16 +112,24 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
           matchedItemName: matchedItem.name,
           matchedBatchId: null,
           quantity: qtyPart,
-          rate: ratePart,
-          total: qtyPart * ratePart,
+          rate: qtyPart > 0 && amountPart > 0 ? amountPart / qtyPart : 0,
+          total: amountPart,
           confidence: match.score,
           error: 'No stock available for this item'
         });
         continue;
       }
 
-      // Use batch selling price if rate not provided
-      const finalRate = ratePart > 0 ? ratePart : bestBatch.selling_price;
+      // Calculate rate from amount, or use batch selling price
+      let finalRate: number;
+      let finalTotal: number;
+      if (amountPart > 0) {
+        finalTotal = amountPart;
+        finalRate = qtyPart > 0 ? amountPart / qtyPart : 0;
+      } else {
+        finalRate = bestBatch.selling_price;
+        finalTotal = qtyPart * finalRate;
+      }
 
       parsed.push({
         originalName: itemNamePart,
@@ -135,7 +138,7 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
         matchedBatchId: bestBatch.id,
         quantity: qtyPart,
         rate: finalRate,
-        total: qtyPart * finalRate,
+        total: finalTotal,
         confidence: match.score
       });
     }
@@ -148,8 +151,12 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
     const updated = [...parsedLines];
     updated[index] = { ...updated[index], [field]: value };
     
-    // Recalculate total
-    if (field === 'quantity' || field === 'rate') {
+    if (field === 'quantity' || field === 'total') {
+      // Recalculate rate from total/qty
+      if (updated[index].quantity > 0) {
+        updated[index].rate = updated[index].total / updated[index].quantity;
+      }
+    } else if (field === 'rate') {
       updated[index].total = updated[index].quantity * updated[index].rate;
     }
     
@@ -166,7 +173,6 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
     
     if (validLines.length === 0) return;
 
-    // Find item and batch details for each line
     const lineItems = validLines.map(line => {
       const item = items?.find(i => i.id === line.matchedItemId);
       const batch = batches?.find(b => b.id === line.matchedBatchId);
@@ -195,6 +201,9 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
 
     await createSale.mutateAsync({
       sale_type: 'quick',
+      customer_name: customerName || undefined,
+      customer_phone: customerPhone || undefined,
+      customer_address: customerAddress || undefined,
       subtotal,
       discount: 0,
       tax: 0,
@@ -202,10 +211,12 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
       items: lineItems,
     });
 
-    // Reset and close
     setRawInput('');
     setParsedLines([]);
     setStep('input');
+    setCustomerName('');
+    setCustomerPhone('');
+    setCustomerAddress('');
     onOpenChange(false);
   };
 
@@ -227,23 +238,38 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
           <div className="space-y-4 flex-1">
             <Alert>
               <AlertDescription className="text-xs">
-                Paste items line by line. Each line should have: <strong>Item Name, Quantity, Rate</strong><br />
-                Separate with tabs, commas, pipes, or multiple spaces. Rate is optional (uses batch price if omitted).
+                Paste items line by line. Each line: <strong>Item Name, Quantity, Total Amount</strong><br />
+                Separate with tabs, commas, pipes, or multiple spaces. Amount is optional (uses batch price × qty if omitted).
               </AlertDescription>
             </Alert>
 
             <div>
               <Label className="text-sm">Paste Items</Label>
               <Textarea
-                placeholder={`Example:\nCement Bag    10    350\nTMT Steel Bar, 5, 4500\nBricks | 1000 | 8`}
+                placeholder={`Example:\nCement Bag    10    3500\nTMT Steel Bar, 5, 22500\nBricks | 1000 | 8000`}
                 value={rawInput}
                 onChange={(e) => setRawInput(e.target.value)}
-                className="h-64 font-mono text-sm"
+                className="h-48 font-mono text-sm"
               />
             </div>
 
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Customer Name</Label>
+                <Input value={customerName} onChange={e => setCustomerName(e.target.value)} className="h-8 text-sm" placeholder="Optional" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Phone</Label>
+                <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} className="h-8 text-sm" placeholder="Optional" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Address</Label>
+                <Input value={customerAddress} onChange={e => setCustomerAddress(e.target.value)} className="h-8 text-sm" placeholder="Optional" />
+              </div>
+            </div>
+
             <div className="text-xs text-muted-foreground">
-              Tip: Copy directly from Excel/Google Sheets - it will paste with tabs automatically.
+              Tip: Copy from Excel/Sheets. Third column is <strong>total amount</strong> (not per-unit rate).
             </div>
           </div>
         )}
@@ -273,7 +299,7 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
                     <TableHead>Matched Item</TableHead>
                     <TableHead className="text-right w-20">Qty</TableHead>
                     <TableHead className="text-right w-24">Rate ₹</TableHead>
-                    <TableHead className="text-right w-24">Total ₹</TableHead>
+                    <TableHead className="text-right w-24">Amount ₹</TableHead>
                     <TableHead className="w-16">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -284,7 +310,7 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
                         <div className="text-xs">
                           {line.originalName}
                           {line.confidence > 0 && line.confidence < 1 && (
-                            <span className="text-muted-foreground ml-1">({Math.round(line.confidence * 100)}% match)</span>
+                            <span className="text-muted-foreground ml-1">({Math.round(line.confidence * 100)}%)</span>
                           )}
                         </div>
                       </TableCell>
@@ -310,20 +336,20 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
                         )}
                       </TableCell>
                       <TableCell className="text-right">
+                        <span className="font-mono text-xs">₹{line.rate.toFixed(2)}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
                         {editingIndex === index ? (
                           <Input
                             type="number"
-                            value={line.rate}
-                            onChange={(e) => updateLine(index, 'rate', parseFloat(e.target.value) || 0)}
+                            value={line.total}
+                            onChange={(e) => updateLine(index, 'total', parseFloat(e.target.value) || 0)}
                             className="h-6 w-20 text-xs"
                             onBlur={() => setEditingIndex(null)}
                           />
                         ) : (
-                          <span className="font-mono text-xs">₹{line.rate}</span>
+                          <span className="font-mono text-xs font-medium">₹{line.total.toFixed(2)}</span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-xs font-medium">
-                        ₹{line.total.toFixed(2)}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
@@ -340,6 +366,12 @@ export function SimpleBulkUploadDialog({ open, onOpenChange }: SimpleBulkUploadD
                 </TableBody>
               </Table>
             </div>
+
+            {customerName && (
+              <div className="text-xs text-muted-foreground">
+                Customer: {customerName} {customerPhone && `| ${customerPhone}`} {customerAddress && `| ${customerAddress}`}
+              </div>
+            )}
 
             <div className="flex justify-between items-center text-sm">
               <span className="text-muted-foreground">{parsedLines.length} items parsed</span>
