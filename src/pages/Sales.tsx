@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,11 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useItems, type ItemWithCategory } from '@/hooks/useItems';
 import { useBatchesByItem, type Batch } from '@/hooks/useBatches';
-import { useSales, useCreateSale, type SaleLineItem, type SaleWithDetails } from '@/hooks/useSales';
+import { useSales, useCreateSale, useDeleteSale, type SaleLineItem, type SaleWithDetails } from '@/hooks/useSales';
 import { format } from 'date-fns';
-import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, RefreshCw, Upload, Edit2 } from 'lucide-react';
+import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, Upload, Edit2, AlertTriangle } from 'lucide-react';
 import { BulkSaleUploadDialog } from '@/components/sales/BulkSaleUploadDialog';
 import { SimpleBulkUploadDialog } from '@/components/sales/SimpleBulkUploadDialog';
 
@@ -24,9 +25,11 @@ interface SaleLineItemWithUnits extends SaleLineItem {
 
 function QuickSale() {
   const [search, setSearch] = useState('');
+  const [showItemList, setShowItemList] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [lineItems, setLineItems] = useState<SaleLineItemWithUnits[]>([]);
   const [discount, setDiscount] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const { data: items } = useItems();
   const { data: batches } = useBatchesByItem(selectedItemId);
@@ -35,24 +38,25 @@ function QuickSale() {
   const selectedItem = useMemo(() => items?.find(i => i.id === selectedItemId), [items, selectedItemId]);
 
   const filteredItems = useMemo(() => {
-    if (!items || !search) return [];
+    if (!items) return items || [];
+    if (!search) return items.slice(0, 15);
     return items.filter(i => 
       i.name.toLowerCase().includes(search.toLowerCase()) || 
       i.item_code.toLowerCase().includes(search.toLowerCase())
-    ).slice(0, 10);
+    ).slice(0, 15);
   }, [items, search]);
 
   const addItem = (itemId: string) => {
     const item = items?.find(i => i.id === itemId);
     if (!item) return;
     setSelectedItemId(itemId);
+    setShowItemList(false);
   };
 
   const selectBatch = (batch: Batch) => {
     const item = items?.find(i => i.id === selectedItemId);
     if (!item || batch.remaining_quantity <= 0) return;
 
-    // Use batch-specific conversion factor if available, otherwise fall back to item default
     const effectiveConversionFactor = (batch as any).batch_conversion_factor ?? item.conversion_factor ?? null;
     const secondaryQty = effectiveConversionFactor ? 1 * effectiveConversionFactor : null;
 
@@ -69,22 +73,24 @@ function QuickSale() {
       profit: batch.selling_price - batch.purchase_price,
       primary_unit: item.primary_unit,
       secondary_unit: item.secondary_unit || null,
-      conversion_factor: effectiveConversionFactor, // Use batch-specific conversion
+      conversion_factor: effectiveConversionFactor,
     }]);
     setSelectedItemId('');
     setSearch('');
+    // Auto-focus search for next entry
+    setTimeout(() => {
+      searchRef.current?.focus();
+      setShowItemList(true);
+    }, 100);
   };
 
   const updatePrimaryQuantity = (index: number, qty: number) => {
     const updated = [...lineItems];
     const item = updated[index];
     item.quantity_primary = qty;
-    
-    // Auto-calculate secondary
     if (item.conversion_factor) {
       item.quantity_secondary = qty * item.conversion_factor;
     }
-    
     item.total = qty * item.rate;
     item.profit = (item.rate - item.purchase_price) * qty;
     setLineItems(updated);
@@ -94,14 +100,11 @@ function QuickSale() {
     const updated = [...lineItems];
     const item = updated[index];
     item.quantity_secondary = qty;
-    
-    // Auto-calculate primary from secondary
     if (item.conversion_factor && item.conversion_factor !== 0) {
       item.quantity_primary = qty / item.conversion_factor;
       item.total = item.quantity_primary * item.rate;
       item.profit = (item.rate - item.purchase_price) * item.quantity_primary;
     }
-    
     setLineItems(updated);
   };
 
@@ -157,14 +160,16 @@ function QuickSale() {
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
+              ref={searchRef}
               placeholder="Search item by name or code..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setSelectedItemId(''); }}
+              onChange={(e) => { setSearch(e.target.value); setSelectedItemId(''); setShowItemList(true); }}
+              onFocus={() => { setShowItemList(true); setSelectedItemId(''); }}
               className="pl-8 h-9"
             />
           </div>
 
-          {search && filteredItems.length > 0 && !selectedItemId && (
+          {showItemList && !selectedItemId && filteredItems.length > 0 && (
             <div className="border rounded-md max-h-48 overflow-auto">
               {filteredItems.map(item => {
                 const secondaryStock = item.conversion_factor && item.secondary_unit 
@@ -198,7 +203,6 @@ function QuickSale() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {batches.filter(b => b.remaining_quantity > 0).map(batch => {
-                  // Use batch-specific conversion if available
                   const effectiveConversion = (batch as any).batch_conversion_factor ?? selectedItem.conversion_factor ?? null;
                   const secondaryRemaining = effectiveConversion && selectedItem.secondary_unit
                     ? batch.remaining_quantity * effectiveConversion
@@ -321,7 +325,26 @@ function QuickSale() {
 function SalesHistory() {
   const [showProfit, setShowProfit] = useState(false);
   const [viewSale, setViewSale] = useState<SaleWithDetails | null>(null);
+  const [deleteSaleTarget, setDeleteSaleTarget] = useState<SaleWithDetails | null>(null);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<SaleWithDetails | null>(null);
+  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState('');
   const { data: sales, isLoading } = useSales();
+  const deleteSaleMutation = useDeleteSale();
+
+  const handleDelete = async () => {
+    if (deleteSaleTarget) {
+      await deleteSaleMutation.mutateAsync(deleteSaleTarget.id);
+      setDeleteSaleTarget(null);
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (permanentDeleteTarget && permanentDeleteConfirm === permanentDeleteTarget.sale_number) {
+      await deleteSaleMutation.mutateAsync(permanentDeleteTarget.id);
+      setPermanentDeleteTarget(null);
+      setPermanentDeleteConfirm('');
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -340,7 +363,7 @@ function SalesHistory() {
               <TableHead>Items</TableHead>
               <TableHead className="text-right">Total ₹</TableHead>
               {showProfit && <TableHead className="text-right">Profit ₹</TableHead>}
-              <TableHead className="w-16"></TableHead>
+              <TableHead className="w-28">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -357,13 +380,27 @@ function SalesHistory() {
                   <TableCell><Badge variant="secondary">{sale.sale_items.length}</Badge></TableCell>
                   <TableCell className="text-right font-mono font-medium">₹{sale.total_amount}</TableCell>
                   {showProfit && <TableCell className="text-right font-mono text-green-400">₹{sale.total_profit}</TableCell>}
-                  <TableCell><Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)}><Eye className="w-3 h-3" /></Button></TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)} title="View">
+                        <Eye className="w-3 h-3" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteSaleTarget(sale)} title="Delete (restore stock)">
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setPermanentDeleteTarget(sale)} title="Permanent Delete">
+                        <AlertTriangle className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
       </div>
+
+      {/* View Sale Dialog */}
       <Dialog open={!!viewSale} onOpenChange={(o) => !o && setViewSale(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader><DialogTitle>Sale {viewSale?.sale_number}</DialogTitle></DialogHeader>
@@ -406,6 +443,53 @@ function SalesHistory() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete (restore stock) dialog */}
+      <AlertDialog open={!!deleteSaleTarget} onOpenChange={() => setDeleteSaleTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Sale</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete "{deleteSaleTarget?.sale_number}"? Stock will be restored to respective batches.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Permanent delete dialog (double confirm) */}
+      <AlertDialog open={!!permanentDeleteTarget} onOpenChange={() => { setPermanentDeleteTarget(null); setPermanentDeleteConfirm(''); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Permanent Delete
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{permanentDeleteTarget?.sale_number}" and restore stock. Type the invoice number to confirm:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={permanentDeleteConfirm}
+            onChange={(e) => setPermanentDeleteConfirm(e.target.value)}
+            placeholder={permanentDeleteTarget?.sale_number}
+            className="h-8 text-sm"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handlePermanentDelete} 
+              className="bg-destructive text-destructive-foreground"
+              disabled={permanentDeleteConfirm !== permanentDeleteTarget?.sale_number}
+            >
+              Permanently Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
