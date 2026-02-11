@@ -5,13 +5,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { useItems, useDeleteItem, type ItemWithCategory } from '@/hooks/useItems';
+import { useItems, useDeleteItem, useUpdateItem, type ItemWithCategory } from '@/hooks/useItems';
 import { useCategories } from '@/hooks/useCategories';
 import { CategoryDialog } from '@/components/items/CategoryDialog';
 import { ItemFormDialog } from '@/components/items/ItemFormDialog';
 import { BulkUploadDialog } from '@/components/items/BulkUploadDialog';
 import { ItemBatchesDialog } from '@/components/items/ItemBatchesDialog';
-import { Search, Plus, Pencil, Trash2, Package, ChevronDown } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Package, ChevronDown, AlertTriangle, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 
 export default function Items() {
   const [search, setSearch] = useState('');
@@ -19,16 +19,19 @@ export default function Items() {
   const [showItemForm, setShowItemForm] = useState(false);
   const [editItem, setEditItem] = useState<ItemWithCategory | null>(null);
   const [deleteItem, setDeleteItem] = useState<ItemWithCategory | null>(null);
+  const [permanentDeleteItem, setPermanentDeleteItem] = useState<ItemWithCategory | null>(null);
+  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState('');
   const [viewBatchesItem, setViewBatchesItem] = useState<ItemWithCategory | null>(null);
 
   const { data: items, isLoading } = useItems();
   const { data: categories } = useCategories();
   const deleteItemMutation = useDeleteItem();
+  const updateItemMutation = useUpdateItem();
 
   const filteredItems = useMemo(() => {
     if (!items) return [];
     
-    return items.filter(item => {
+    let filtered = items.filter(item => {
       const matchesSearch = search === '' || 
         item.name.toLowerCase().includes(search.toLowerCase()) ||
         item.item_code.toLowerCase().includes(search.toLowerCase());
@@ -37,6 +40,9 @@ export default function Items() {
       
       return matchesSearch && matchesCategory;
     });
+
+    // Sort by sort_order
+    return filtered.sort((a, b) => ((a as any).sort_order || 0) - ((b as any).sort_order || 0));
   }, [items, search, categoryFilter]);
 
   const handleEdit = (item: ItemWithCategory) => {
@@ -49,6 +55,30 @@ export default function Items() {
       await deleteItemMutation.mutateAsync(deleteItem.id);
       setDeleteItem(null);
     }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (permanentDeleteItem && permanentDeleteConfirm === permanentDeleteItem.name) {
+      await deleteItemMutation.mutateAsync(permanentDeleteItem.id);
+      setPermanentDeleteItem(null);
+      setPermanentDeleteConfirm('');
+    }
+  };
+
+  const moveItem = async (item: ItemWithCategory, direction: 'up' | 'down') => {
+    const index = filteredItems.findIndex(i => i.id === item.id);
+    if ((direction === 'up' && index === 0) || (direction === 'down' && index === filteredItems.length - 1)) return;
+    
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    const swapItem = filteredItems[swapIndex];
+    
+    const currentOrder = (item as any).sort_order || 0;
+    const swapOrder = (swapItem as any).sort_order || 0;
+
+    await Promise.all([
+      updateItemMutation.mutateAsync({ id: item.id, sort_order: swapOrder } as any),
+      updateItemMutation.mutateAsync({ id: swapItem.id, sort_order: currentOrder } as any),
+    ]);
   };
 
   const getStockStatusClass = (item: ItemWithCategory) => {
@@ -103,29 +133,40 @@ export default function Items() {
         <Table className="data-table">
           <TableHeader>
             <TableRow>
+              <TableHead className="w-16">Order</TableHead>
               <TableHead className="w-24">Code</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Unit</TableHead>
               <TableHead className="text-right">Stock</TableHead>
               <TableHead className="text-right">Price ₹</TableHead>
-              <TableHead className="w-24">Actions</TableHead>
+              <TableHead className="w-28">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">Loading items...</TableCell>
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">Loading items...</TableCell>
               </TableRow>
             ) : filteredItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   {items?.length === 0 ? 'No items yet. Add your first item.' : 'No items match your search.'}
                 </TableCell>
               </TableRow>
             ) : (
-              filteredItems.map((item) => (
+              filteredItems.map((item, idx) => (
                 <TableRow key={item.id}>
+                  <TableCell>
+                    <div className="flex gap-0.5">
+                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => moveItem(item, 'up')} disabled={idx === 0}>
+                        <ArrowUp className="w-3 h-3" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => moveItem(item, 'down')} disabled={idx === filteredItems.length - 1}>
+                        <ArrowDown className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </TableCell>
                   <TableCell className="font-mono text-xs">{item.item_code}</TableCell>
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell>
@@ -158,8 +199,11 @@ export default function Items() {
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEdit(item)}>
                         <Pencil className="w-3 h-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setDeleteItem(item)}>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteItem(item)}>
                         <Trash2 className="w-3 h-3" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setPermanentDeleteItem(item)} title="Permanent Delete">
+                        <AlertTriangle className="w-3 h-3" />
                       </Button>
                     </div>
                   </TableCell>
@@ -188,6 +232,7 @@ export default function Items() {
         onOpenChange={(open) => !open && setViewBatchesItem(null)}
       />
 
+      {/* Regular Delete */}
       <AlertDialog open={!!deleteItem} onOpenChange={() => setDeleteItem(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -199,6 +244,37 @@ export default function Items() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Permanent Delete (double confirm) */}
+      <AlertDialog open={!!permanentDeleteItem} onOpenChange={() => { setPermanentDeleteItem(null); setPermanentDeleteConfirm(''); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Permanent Delete
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{permanentDeleteItem?.name}" and all associated batches, stock, and transaction history. Type the item name to confirm:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={permanentDeleteConfirm}
+            onChange={(e) => setPermanentDeleteConfirm(e.target.value)}
+            placeholder={permanentDeleteItem?.name}
+            className="h-8 text-sm"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handlePermanentDelete} 
+              className="bg-destructive text-destructive-foreground"
+              disabled={permanentDeleteConfirm !== permanentDeleteItem?.name}
+            >
+              Permanently Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

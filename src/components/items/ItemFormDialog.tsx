@@ -4,9 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useCategories } from '@/hooks/useCategories';
 import { useCreateItem, useUpdateItem, type ItemWithCategory } from '@/hooks/useItems';
 import type { Database } from '@/integrations/supabase/types';
+import { ArrowRightLeft } from 'lucide-react';
 
 type UnitType = Database['public']['Enums']['unit_type'];
 
@@ -35,6 +37,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
     primary_unit: 'pcs',
     secondary_unit: '',
     conversion_factor: 1,
+    conversion_mode: 'permanent' as 'permanent' | 'batch_wise',
     current_selling_price: 0,
     low_stock_threshold: 10,
   });
@@ -49,6 +52,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
         primary_unit: editItem.primary_unit,
         secondary_unit: editItem.secondary_unit || '',
         conversion_factor: editItem.conversion_factor || 1,
+        conversion_mode: (editItem as any).conversion_mode || 'permanent',
         current_selling_price: editItem.current_selling_price,
         low_stock_threshold: editItem.low_stock_threshold || 10,
       });
@@ -61,6 +65,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
         primary_unit: 'pcs',
         secondary_unit: '',
         conversion_factor: 1,
+        conversion_mode: 'permanent',
         current_selling_price: 0,
         low_stock_threshold: 10,
       });
@@ -88,6 +93,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
       primary_unit: formData.primary_unit,
       secondary_unit: formData.secondary_unit || null,
       conversion_factor: formData.unit_type !== 'piece' ? formData.conversion_factor : null,
+      conversion_mode: formData.unit_type !== 'piece' ? formData.conversion_mode : 'permanent',
       current_selling_price: formData.current_selling_price,
       low_stock_threshold: formData.low_stock_threshold,
     };
@@ -102,6 +108,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
   };
 
   const isPending = createItem.isPending || updateItem.isPending;
+  const inverseConversion = formData.conversion_factor ? (1 / formData.conversion_factor) : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -170,35 +177,67 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
           </div>
 
           {formData.unit_type !== 'piece' && (
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <Label className="text-xs">Primary Unit</Label>
-                <Input
-                  value={formData.primary_unit}
-                  onChange={(e) => setFormData(prev => ({ ...prev, primary_unit: e.target.value }))}
-                  className="h-8 text-sm"
-                />
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">Primary Unit</Label>
+                  <Input
+                    value={formData.primary_unit}
+                    onChange={(e) => setFormData(prev => ({ ...prev, primary_unit: e.target.value }))}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Secondary Unit</Label>
+                  <Input
+                    value={formData.secondary_unit}
+                    onChange={(e) => setFormData(prev => ({ ...prev, secondary_unit: e.target.value }))}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Conversion Factor</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.conversion_factor}
+                    onChange={(e) => setFormData(prev => ({ ...prev, conversion_factor: parseFloat(e.target.value) || 1 }))}
+                    className="h-8 text-sm"
+                    placeholder="1 primary = ? secondary"
+                  />
+                </div>
               </div>
-              <div>
-                <Label className="text-xs">Secondary Unit</Label>
-                <Input
-                  value={formData.secondary_unit}
-                  onChange={(e) => setFormData(prev => ({ ...prev, secondary_unit: e.target.value }))}
-                  className="h-8 text-sm"
-                />
+
+              {/* To and Fro conversion display */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-accent/50 p-2 rounded-md">
+                <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  1 {formData.primary_unit} = {formData.conversion_factor} {formData.secondary_unit}
+                  <span className="mx-2">|</span>
+                  1 {formData.secondary_unit} = {inverseConversion.toFixed(4)} {formData.primary_unit}
+                </span>
               </div>
-              <div>
-                <Label className="text-xs">Conversion Factor</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={formData.conversion_factor}
-                  onChange={(e) => setFormData(prev => ({ ...prev, conversion_factor: parseFloat(e.target.value) || 1 }))}
-                  className="h-8 text-sm"
-                  placeholder="1 primary = ? secondary"
-                />
+
+              {/* Conversion mode toggle */}
+              <div className="flex items-center justify-between bg-accent/30 p-2 rounded-md">
+                <div>
+                  <Label className="text-xs font-medium">Conversion Ratio Mode</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {formData.conversion_mode === 'permanent' 
+                      ? 'Uses fixed ratio for all batches' 
+                      : 'Each batch can have its own ratio'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Permanent</span>
+                  <Switch
+                    checked={formData.conversion_mode === 'batch_wise'}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, conversion_mode: checked ? 'batch_wise' : 'permanent' }))}
+                  />
+                  <span className="text-xs text-muted-foreground">Batch-wise</span>
+                </div>
               </div>
-            </div>
+            </>
           )}
 
           <div className="grid grid-cols-2 gap-3">

@@ -76,6 +76,7 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          sort_order: number
           updated_at: string
         }
         Insert: {
@@ -83,6 +84,7 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          sort_order?: number
           updated_at?: string
         }
         Update: {
@@ -90,6 +92,7 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          sort_order?: number
           updated_at?: string
         }
         Relationships: []
@@ -98,6 +101,7 @@ export type Database = {
         Row: {
           category_id: string | null
           conversion_factor: number | null
+          conversion_mode: string
           created_at: string
           current_selling_price: number
           id: string
@@ -106,12 +110,14 @@ export type Database = {
           name: string
           primary_unit: string
           secondary_unit: string | null
+          sort_order: number
           unit_type: Database["public"]["Enums"]["unit_type"]
           updated_at: string
         }
         Insert: {
           category_id?: string | null
           conversion_factor?: number | null
+          conversion_mode?: string
           created_at?: string
           current_selling_price?: number
           id?: string
@@ -120,12 +126,14 @@ export type Database = {
           name: string
           primary_unit?: string
           secondary_unit?: string | null
+          sort_order?: number
           unit_type?: Database["public"]["Enums"]["unit_type"]
           updated_at?: string
         }
         Update: {
           category_id?: string | null
           conversion_factor?: number | null
+          conversion_mode?: string
           created_at?: string
           current_selling_price?: number
           id?: string
@@ -134,6 +142,7 @@ export type Database = {
           name?: string
           primary_unit?: string
           secondary_unit?: string | null
+          sort_order?: number
           unit_type?: Database["public"]["Enums"]["unit_type"]
           updated_at?: string
         }
