@@ -4,10 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { usePurchases, useDeletePurchase, type PurchaseWithDetails } from '@/hooks/usePurchases';
+import { DeleteDialog } from '@/components/common/DeleteDialog';
 import { format } from 'date-fns';
-import { Search, Plus, Trash2, Eye, Package, Edit2, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Eye, Package, Edit2, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 function PurchaseDetailsDialog({ purchase, open, onOpenChange }: { purchase: PurchaseWithDetails | null; open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -83,9 +83,7 @@ export default function Purchases() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [viewPurchase, setViewPurchase] = useState<PurchaseWithDetails | null>(null);
-  const [deletePurchase, setDeletePurchase] = useState<PurchaseWithDetails | null>(null);
-  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<PurchaseWithDetails | null>(null);
-  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<PurchaseWithDetails | null>(null);
 
   const { data: purchases, isLoading } = usePurchases();
   const deletePurchaseMutation = useDeletePurchase();
@@ -95,21 +93,6 @@ export default function Purchases() {
     p.purchase_number.toLowerCase().includes(search.toLowerCase()) ||
     p.suppliers?.name.toLowerCase().includes(search.toLowerCase())
   ) || [];
-
-  const handleDelete = async () => {
-    if (deletePurchase) {
-      await deletePurchaseMutation.mutateAsync(deletePurchase.id);
-      setDeletePurchase(null);
-    }
-  };
-
-  const handlePermanentDelete = async () => {
-    if (permanentDeleteTarget && permanentDeleteConfirm === permanentDeleteTarget.purchase_number) {
-      await deletePurchaseMutation.mutateAsync(permanentDeleteTarget.id);
-      setPermanentDeleteTarget(null);
-      setPermanentDeleteConfirm('');
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -142,7 +125,7 @@ export default function Purchases() {
               <TableHead>Supplier</TableHead>
               <TableHead>Items</TableHead>
               <TableHead className="text-right">Total ₹</TableHead>
-              <TableHead className="w-28">Actions</TableHead>
+              <TableHead className="w-24">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -174,11 +157,8 @@ export default function Purchases() {
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigate(`/purchases/${purchase.id}/edit`)}>
                         <Edit2 className="w-3 h-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeletePurchase(purchase)}>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(purchase)}>
                         <Trash2 className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setPermanentDeleteTarget(purchase)} title="Permanent Delete">
-                        <AlertTriangle className="w-3 h-3" />
                       </Button>
                     </div>
                   </TableCell>
@@ -201,52 +181,17 @@ export default function Purchases() {
         onOpenChange={(open) => !open && setViewPurchase(null)} 
       />
 
-      {/* Regular delete */}
-      <AlertDialog open={!!deletePurchase} onOpenChange={() => setDeletePurchase(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Purchase</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete purchase "{deletePurchase?.purchase_number}"? This will also delete the associated batches and stock.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Permanent delete (double confirm) */}
-      <AlertDialog open={!!permanentDeleteTarget} onOpenChange={() => { setPermanentDeleteTarget(null); setPermanentDeleteConfirm(''); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="w-5 h-5" />
-              Permanent Delete
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete "{permanentDeleteTarget?.purchase_number}" and associated batches. Type the purchase number to confirm:
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <Input
-            value={permanentDeleteConfirm}
-            onChange={(e) => setPermanentDeleteConfirm(e.target.value)}
-            placeholder={permanentDeleteTarget?.purchase_number}
-            className="h-8 text-sm"
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handlePermanentDelete} 
-              className="bg-destructive text-destructive-foreground"
-              disabled={permanentDeleteConfirm !== permanentDeleteTarget?.purchase_number}
-            >
-              Permanently Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        itemName={deleteTarget?.purchase_number || ''}
+        onDelete={async () => {
+          if (deleteTarget) await deletePurchaseMutation.mutateAsync(deleteTarget.id);
+        }}
+        onPermanentDelete={async () => {
+          if (deleteTarget) await deletePurchaseMutation.mutateAsync(deleteTarget.id);
+        }}
+      />
     </div>
   );
 }
