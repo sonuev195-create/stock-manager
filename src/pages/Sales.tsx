@@ -12,10 +12,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useItems, type ItemWithCategory } from '@/hooks/useItems';
 import { useBatchesByItem, type Batch } from '@/hooks/useBatches';
 import { useSales, useCreateSale, useDeleteSale, type SaleLineItem, type SaleWithDetails } from '@/hooks/useSales';
+import { useUpdateSale } from '@/hooks/useUpdateSale';
 import { format } from 'date-fns';
-import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, Upload, Edit2, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, Upload, Edit2 } from 'lucide-react';
 import { BulkSaleUploadDialog } from '@/components/sales/BulkSaleUploadDialog';
 import { SimpleBulkUploadDialog } from '@/components/sales/SimpleBulkUploadDialog';
+import { DeleteDialog } from '@/components/common/DeleteDialog';
 
 interface SaleLineItemWithUnits extends SaleLineItem {
   primary_unit: string;
@@ -325,26 +327,9 @@ function QuickSale() {
 function SalesHistory() {
   const [showProfit, setShowProfit] = useState(false);
   const [viewSale, setViewSale] = useState<SaleWithDetails | null>(null);
-  const [deleteSaleTarget, setDeleteSaleTarget] = useState<SaleWithDetails | null>(null);
-  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<SaleWithDetails | null>(null);
-  const [permanentDeleteConfirm, setPermanentDeleteConfirm] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<SaleWithDetails | null>(null);
   const { data: sales, isLoading } = useSales();
   const deleteSaleMutation = useDeleteSale();
-
-  const handleDelete = async () => {
-    if (deleteSaleTarget) {
-      await deleteSaleMutation.mutateAsync(deleteSaleTarget.id);
-      setDeleteSaleTarget(null);
-    }
-  };
-
-  const handlePermanentDelete = async () => {
-    if (permanentDeleteTarget && permanentDeleteConfirm === permanentDeleteTarget.sale_number) {
-      await deleteSaleMutation.mutateAsync(permanentDeleteTarget.id);
-      setPermanentDeleteTarget(null);
-      setPermanentDeleteConfirm('');
-    }
-  };
 
   return (
     <div className="space-y-3">
@@ -363,7 +348,7 @@ function SalesHistory() {
               <TableHead>Items</TableHead>
               <TableHead className="text-right">Total ₹</TableHead>
               {showProfit && <TableHead className="text-right">Profit ₹</TableHead>}
-              <TableHead className="w-28">Actions</TableHead>
+              <TableHead className="w-24">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -385,11 +370,8 @@ function SalesHistory() {
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)} title="View">
                         <Eye className="w-3 h-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteSaleTarget(sale)} title="Delete (restore stock)">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(sale)} title="Delete">
                         <Trash2 className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setPermanentDeleteTarget(sale)} title="Permanent Delete">
-                        <AlertTriangle className="w-3 h-3" />
                       </Button>
                     </div>
                   </TableCell>
@@ -444,52 +426,17 @@ function SalesHistory() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete (restore stock) dialog */}
-      <AlertDialog open={!!deleteSaleTarget} onOpenChange={() => setDeleteSaleTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Sale</AlertDialogTitle>
-            <AlertDialogDescription>
-              Delete "{deleteSaleTarget?.sale_number}"? Stock will be restored to respective batches.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Permanent delete dialog (double confirm) */}
-      <AlertDialog open={!!permanentDeleteTarget} onOpenChange={() => { setPermanentDeleteTarget(null); setPermanentDeleteConfirm(''); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="w-5 h-5" />
-              Permanent Delete
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete "{permanentDeleteTarget?.sale_number}" and restore stock. Type the invoice number to confirm:
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <Input
-            value={permanentDeleteConfirm}
-            onChange={(e) => setPermanentDeleteConfirm(e.target.value)}
-            placeholder={permanentDeleteTarget?.sale_number}
-            className="h-8 text-sm"
-          />
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handlePermanentDelete} 
-              className="bg-destructive text-destructive-foreground"
-              disabled={permanentDeleteConfirm !== permanentDeleteTarget?.sale_number}
-            >
-              Permanently Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        itemName={deleteTarget?.sale_number || ''}
+        onDelete={async () => {
+          if (deleteTarget) await deleteSaleMutation.mutateAsync(deleteTarget.id);
+        }}
+        onPermanentDelete={async () => {
+          if (deleteTarget) await deleteSaleMutation.mutateAsync(deleteTarget.id);
+        }}
+      />
     </div>
   );
 }

@@ -14,7 +14,7 @@ import {
   SALE_COLUMNS, 
   SUPPLIER_COLUMNS 
 } from '@/lib/exportUtils';
-import { Save, Settings2, FileText } from 'lucide-react';
+import { Save, Settings2, FileText, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Settings() {
@@ -28,6 +28,7 @@ export default function Settings() {
   const [invoicePrefix, setInvoicePrefix] = useState('INV');
   const [purchasePrefix, setPurchasePrefix] = useState('PUR');
   const [lowStockAlertEnabled, setLowStockAlertEnabled] = useState(true);
+  const [deletePassword, setDeletePassword] = useState('');
   
   const [reportColumns, setLocalReportColumns] = useState<ReportColumns>(getReportColumns());
 
@@ -40,6 +41,7 @@ export default function Settings() {
       setInvoicePrefix(settings.invoice_prefix || 'INV');
       setPurchasePrefix(settings.purchase_prefix || 'PUR');
       setLowStockAlertEnabled(settings.low_stock_alert_enabled ?? true);
+      setDeletePassword((settings as any).delete_password || '');
     }
   }, [settings]);
 
@@ -52,7 +54,8 @@ export default function Settings() {
       invoice_prefix: invoicePrefix,
       purchase_prefix: purchasePrefix,
       low_stock_alert_enabled: lowStockAlertEnabled,
-    });
+      delete_password: deletePassword || null,
+    } as any);
   };
 
   const toggleReportColumn = (reportType: keyof ReportColumns, columnKey: string) => {
@@ -191,6 +194,21 @@ export default function Settings() {
                 <Switch
                   checked={lowStockAlertEnabled}
                   onCheckedChange={setLowStockAlertEnabled}
+                />
+              </div>
+              
+              <div className="space-y-1.5 pt-4 border-t">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-muted-foreground" />
+                  <Label className="text-sm">Delete Password</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">Required for permanent deletion of items, bills, and purchases</p>
+                <Input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  className="h-8 text-sm w-48"
+                  placeholder="Set delete password"
                 />
               </div>
               

@@ -416,6 +416,7 @@ export type Database = {
           business_name: string | null
           business_phone: string | null
           created_at: string
+          delete_password: string | null
           id: string
           invoice_prefix: string | null
           low_stock_alert_enabled: boolean | null
@@ -428,6 +429,7 @@ export type Database = {
           business_name?: string | null
           business_phone?: string | null
           created_at?: string
+          delete_password?: string | null
           id?: string
           invoice_prefix?: string | null
           low_stock_alert_enabled?: boolean | null
@@ -440,6 +442,7 @@ export type Database = {
           business_name?: string | null
           business_phone?: string | null
           created_at?: string
+          delete_password?: string | null
           id?: string
           invoice_prefix?: string | null
           low_stock_alert_enabled?: boolean | null

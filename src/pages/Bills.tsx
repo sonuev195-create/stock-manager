@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import { useSales, type SaleWithDetails } from '@/hooks/useSales';
+import { useSales, useDeleteSale, type SaleWithDetails } from '@/hooks/useSales';
+import { DeleteDialog } from '@/components/common/DeleteDialog';
 import { ExportButton } from '@/components/common/ExportButton';
 import { SALE_COLUMNS } from '@/lib/exportUtils';
 import { getReportColumns } from '@/hooks/useSettings';
@@ -19,7 +20,7 @@ import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
   startOfYear, endOfYear, subMonths 
 } from 'date-fns';
-import { Search, Eye, TrendingUp, Calendar, FileText, Upload } from 'lucide-react';
+import { Search, Eye, TrendingUp, Calendar, FileText, Upload, Trash2, Edit2 } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 
 function SaleDetailDialog({ sale, open, onOpenChange }: { sale: SaleWithDetails | null; open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -151,8 +152,10 @@ export default function Bills() {
   const [showProfit, setShowProfit] = useState(false);
   const [viewSale, setViewSale] = useState<SaleWithDetails | null>(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<SaleWithDetails | null>(null);
   
   const { data: sales, isLoading } = useSales();
+  const deleteSaleMutation = useDeleteSale();
   const reportColumns = getReportColumns();
 
   // Get financial year start (April 1)
@@ -388,9 +391,14 @@ export default function Bills() {
                           <TableCell className="text-right font-mono">₹{sale.total_amount}</TableCell>
                           {showProfit && <TableCell className="text-right font-mono text-emerald-500">₹{sale.total_profit}</TableCell>}
                           <TableCell>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)}>
-                              <Eye className="w-3 h-3" />
-                            </Button>
+                            <div className="flex gap-0.5">
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)}>
+                                <Eye className="w-3 h-3" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(sale)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -433,9 +441,14 @@ export default function Bills() {
                     <TableCell className="text-right font-mono">₹{sale.total_amount}</TableCell>
                     {showProfit && <TableCell className="text-right font-mono text-emerald-500">₹{sale.total_profit}</TableCell>}
                     <TableCell>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)}>
-                        <Eye className="w-3 h-3" />
-                      </Button>
+                      <div className="flex gap-0.5">
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)}>
+                          <Eye className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(sale)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -447,6 +460,17 @@ export default function Bills() {
       
       <SaleDetailDialog sale={viewSale} open={!!viewSale} onOpenChange={(o) => !o && setViewSale(null)} />
       <BulkSaleUploadDialog open={showBulkUpload} onOpenChange={setShowBulkUpload} />
+      <DeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        itemName={deleteTarget?.sale_number || ''}
+        onDelete={async () => {
+          if (deleteTarget) await deleteSaleMutation.mutateAsync(deleteTarget.id);
+        }}
+        onPermanentDelete={async () => {
+          if (deleteTarget) await deleteSaleMutation.mutateAsync(deleteTarget.id);
+        }}
+      />
     </div>
   );
 }
