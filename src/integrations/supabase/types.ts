@@ -99,6 +99,7 @@ export type Database = {
       }
       items: {
         Row: {
+          batch_priority: string
           category_id: string | null
           conversion_factor: number | null
           conversion_mode: string
@@ -115,6 +116,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          batch_priority?: string
           category_id?: string | null
           conversion_factor?: number | null
           conversion_mode?: string
@@ -131,6 +133,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          batch_priority?: string
           category_id?: string | null
           conversion_factor?: number | null
           conversion_mode?: string

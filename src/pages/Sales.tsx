@@ -8,15 +8,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useItems, type ItemWithCategory } from '@/hooks/useItems';
 import { useBatchesByItem, type Batch } from '@/hooks/useBatches';
 import { useSales, useCreateSale, useDeleteSale, type SaleLineItem, type SaleWithDetails } from '@/hooks/useSales';
 import { useUpdateSale } from '@/hooks/useUpdateSale';
 import { format } from 'date-fns';
-import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, Upload, Edit2 } from 'lucide-react';
+import { Search, Plus, Trash2, ShoppingCart, Eye, TrendingUp, Upload, Edit2, Camera } from 'lucide-react';
 import { BulkSaleUploadDialog } from '@/components/sales/BulkSaleUploadDialog';
 import { SimpleBulkUploadDialog } from '@/components/sales/SimpleBulkUploadDialog';
+import { PaperBillScanDialog } from '@/components/sales/PaperBillScanDialog';
 import { DeleteDialog } from '@/components/common/DeleteDialog';
 
 interface SaleLineItemWithUnits extends SaleLineItem {
@@ -31,6 +31,7 @@ function QuickSale() {
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [lineItems, setLineItems] = useState<SaleLineItemWithUnits[]>([]);
   const [discount, setDiscount] = useState(0);
+  const [customerName, setCustomerName] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { data: items } = useItems();
@@ -127,10 +128,17 @@ function QuickSale() {
   const totalAmount = subtotal - discount;
   const totalProfit = lineItems.reduce((sum, i) => sum + i.profit, 0) - discount;
 
+  // Proportional discount distribution for display
+  const getItemDiscount = (itemTotal: number) => {
+    if (discount <= 0 || subtotal <= 0) return 0;
+    return (itemTotal / subtotal) * discount;
+  };
+
   const handleSave = async () => {
     if (lineItems.length === 0) return;
     await createSale.mutateAsync({
       sale_type: 'quick',
+      customer_name: customerName || null,
       subtotal,
       discount,
       tax: 0,
@@ -145,11 +153,12 @@ function QuickSale() {
         rate: li.rate,
         purchase_price: li.purchase_price,
         total: li.total,
-        profit: li.profit,
+        profit: li.profit - getItemDiscount(li.total),
       })),
     });
     setLineItems([]);
     setDiscount(0);
+    setCustomerName('');
   };
 
   return (
@@ -218,9 +227,6 @@ function QuickSale() {
                           {secondaryRemaining !== null && selectedItem.secondary_unit && (
                             <span> ({secondaryRemaining.toFixed(1)} {selectedItem.secondary_unit})</span>
                           )}
-                          {effectiveConversion && effectiveConversion !== selectedItem.conversion_factor && (
-                            <span className="ml-1 text-blue-400">[1:{effectiveConversion.toFixed(1)}]</span>
-                          )}
                         </div>
                       </div>
                     </Button>
@@ -237,10 +243,13 @@ function QuickSale() {
                   <TableRow>
                     <TableHead>Item</TableHead>
                     <TableHead>Batch</TableHead>
-                    <TableHead className="w-24">Qty (Primary)</TableHead>
-                    <TableHead className="w-24">Qty (Secondary)</TableHead>
+                    <TableHead className="w-24">Qty ({lineItems[0]?.primary_unit || 'Pri'})</TableHead>
+                    {lineItems.some(li => li.secondary_unit) && (
+                      <TableHead className="w-24">Qty ({lineItems[0]?.secondary_unit || 'Sec'})</TableHead>
+                    )}
                     <TableHead className="w-24">Rate ₹</TableHead>
                     <TableHead className="text-right">Total ₹</TableHead>
+                    {discount > 0 && <TableHead className="text-right w-16">Disc ₹</TableHead>}
                     <TableHead className="w-8"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -266,30 +275,32 @@ function QuickSale() {
                             onDoubleClick={(e) => e.currentTarget.select()}
                             className="h-7 w-16" 
                           />
-                          <span className="text-xs text-muted-foreground">{item.primary_unit}</span>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {item.secondary_unit && item.conversion_factor ? (
-                          <div className="flex items-center gap-1">
+                      {lineItems.some(li => li.secondary_unit) && (
+                        <TableCell>
+                          {item.secondary_unit && item.conversion_factor ? (
                             <Input 
                               type="number" 
                               step="0.01"
                               value={item.quantity_secondary != null ? item.quantity_secondary : ''} 
                               onChange={(e) => updateSecondaryQuantity(i, parseFloat(e.target.value) || 0)} 
-                              onDoubleClick={(e) => e.currentTarget.select()}
                               className="h-7 w-16" 
                             />
-                            <span className="text-xs text-muted-foreground">{item.secondary_unit}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">N/A</span>
-                        )}
-                      </TableCell>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <Input type="number" value={item.rate} onChange={(e) => updateRate(i, parseFloat(e.target.value) || 0)} className="h-7 w-20" />
                       </TableCell>
                       <TableCell className="text-right font-mono">₹{item.total.toFixed(2)}</TableCell>
+                      {discount > 0 && (
+                        <TableCell className="text-right font-mono text-xs text-destructive">
+                          -₹{getItemDiscount(item.total).toFixed(2)}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeItem(i)}><Trash2 className="w-3 h-3" /></Button>
                       </TableCell>
@@ -307,13 +318,20 @@ function QuickSale() {
           <CardTitle className="text-sm">Summary</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Customer Name</Label>
+            <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="h-7" placeholder="Optional" />
+          </div>
           <div className="flex justify-between text-sm"><span>Subtotal</span><span className="font-mono">₹{subtotal.toFixed(2)}</span></div>
           <div className="flex items-center gap-2">
             <Label className="text-xs">Discount ₹</Label>
             <Input type="number" value={discount} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} className="h-7 w-24" />
           </div>
+          {discount > 0 && (
+            <div className="text-xs text-muted-foreground">Discount distributed proportionally across items</div>
+          )}
           <div className="flex justify-between font-bold text-lg border-t pt-2"><span>Total</span><span className="font-mono">₹{totalAmount.toFixed(2)}</span></div>
-          <div className="flex justify-between text-sm text-green-400"><TrendingUp className="w-4 h-4" /><span>Profit: ₹{totalProfit.toFixed(2)}</span></div>
+          <div className="flex justify-between text-sm text-profit"><TrendingUp className="w-4 h-4" /><span>Profit: ₹{totalProfit.toFixed(2)}</span></div>
           <Button className="w-full gap-1" onClick={handleSave} disabled={lineItems.length === 0 || createSale.isPending}>
             <ShoppingCart className="w-4 h-4" />
             {createSale.isPending ? 'Saving...' : 'Complete Sale'}
@@ -364,7 +382,7 @@ function SalesHistory() {
                   <TableCell>{sale.customer_name || '-'}</TableCell>
                   <TableCell><Badge variant="secondary">{sale.sale_items.length}</Badge></TableCell>
                   <TableCell className="text-right font-mono font-medium">₹{sale.total_amount}</TableCell>
-                  {showProfit && <TableCell className="text-right font-mono text-green-400">₹{sale.total_profit}</TableCell>}
+                  {showProfit && <TableCell className="text-right font-mono text-profit">₹{sale.total_profit}</TableCell>}
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)} title="View">
@@ -444,19 +462,24 @@ function SalesHistory() {
 export default function Sales() {
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [showSimpleBulkUpload, setShowSimpleBulkUpload] = useState(false);
+  const [showPaperBillScan, setShowPaperBillScan] = useState(false);
   
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Sales</h1>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => setShowPaperBillScan(true)}>
+            <Camera className="w-3.5 h-3.5" />
+            Scan Bill
+          </Button>
           <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => setShowSimpleBulkUpload(true)}>
             <Upload className="w-3.5 h-3.5" />
             Quick Bulk
           </Button>
           <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => setShowBulkUpload(true)}>
             <Upload className="w-3.5 h-3.5" />
-            Bulk Upload Bills
+            Bulk Upload
           </Button>
         </div>
       </div>
@@ -468,6 +491,7 @@ export default function Sales() {
       
       <BulkSaleUploadDialog open={showBulkUpload} onOpenChange={setShowBulkUpload} />
       <SimpleBulkUploadDialog open={showSimpleBulkUpload} onOpenChange={setShowSimpleBulkUpload} />
+      <PaperBillScanDialog open={showPaperBillScan} onOpenChange={setShowPaperBillScan} />
     </div>
   );
 }
