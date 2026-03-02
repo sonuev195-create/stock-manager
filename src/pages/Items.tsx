@@ -73,7 +73,7 @@ export default function Items() {
     
     if (stock <= 0) return 'out-of-stock';
     if (stock <= threshold) return 'low-stock';
-    return 'text-green-400';
+    return 'text-profit';
   };
 
   return (
@@ -164,68 +164,78 @@ export default function Items() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredItems.map((item, idx) => (
-                <TableRow key={item.id} className={selectedIds.has(item.id) ? 'bg-muted/50' : ''}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(item.id)}
-                      onCheckedChange={(checked) => {
-                        const next = new Set(selectedIds);
-                        if (checked) next.add(item.id);
-                        else next.delete(item.id);
-                        setSelectedIds(next);
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-0.5">
-                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => moveItem(item, 'up')} disabled={idx === 0}>
-                        <ArrowUp className="w-3 h-3" />
+              filteredItems.map((item, idx) => {
+                const primaryStock = item.total_stock || 0;
+                const secondaryStock = item.conversion_factor && item.secondary_unit
+                  ? primaryStock * item.conversion_factor
+                  : null;
+                
+                return (
+                  <TableRow key={item.id} className={selectedIds.has(item.id) ? 'bg-muted/50' : ''}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(item.id)}
+                        onCheckedChange={(checked) => {
+                          const next = new Set(selectedIds);
+                          if (checked) next.add(item.id);
+                          else next.delete(item.id);
+                          setSelectedIds(next);
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-0.5">
+                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => moveItem(item, 'up')} disabled={idx === 0}>
+                          <ArrowUp className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => moveItem(item, 'down')} disabled={idx === filteredItems.length - 1}>
+                          <ArrowDown className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{item.item_code}</TableCell>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell>
+                      {item.categories?.name ? (
+                        <Badge variant="secondary" className="text-xs">{item.categories.name}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {item.unit_type === 'piece' ? item.primary_unit : `${item.primary_unit}/${item.secondary_unit}`}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className={`h-6 px-2 gap-1 font-mono ${getStockStatusClass(item)}`}
+                        onClick={() => setViewBatchesItem(item)}
+                      >
+                        <span>{primaryStock} {item.primary_unit}</span>
+                        {secondaryStock !== null && (
+                          <span className="text-muted-foreground text-[10px]">({secondaryStock.toFixed(1)} {item.secondary_unit})</span>
+                        )}
+                        <ChevronDown className="w-3 h-3" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => moveItem(item, 'down')} disabled={idx === filteredItems.length - 1}>
-                        <ArrowDown className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{item.item_code}</TableCell>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell>
-                    {item.categories?.name ? (
-                      <Badge variant="secondary" className="text-xs">{item.categories.name}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {item.unit_type === 'piece' ? item.primary_unit : `${item.primary_unit}/${item.secondary_unit}`}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className={`h-6 px-2 gap-1 font-mono ${getStockStatusClass(item)}`}
-                      onClick={() => setViewBatchesItem(item)}
-                    >
-                      {item.total_stock || 0}
-                      <ChevronDown className="w-3 h-3" />
-                    </Button>
-                  </TableCell>
-                  <TableCell className="text-right font-mono">₹{item.current_selling_price}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewBatchesItem(item)}>
-                        <Package className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEdit(item)}>
-                        <Pencil className="w-3 h-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(item)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell className="text-right font-mono">₹{item.current_selling_price}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewBatchesItem(item)}>
+                          <Package className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEdit(item)}>
+                          <Pencil className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(item)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

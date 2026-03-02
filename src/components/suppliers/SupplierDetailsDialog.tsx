@@ -9,10 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSupplierWithDetails } from '@/hooks/useSupplierPayments';
-import { useSupplierPayments, useCreateSupplierPayment } from '@/hooks/useSupplierPaymentOperations';
+import { useSupplierPayments, useCreateSupplierPayment, useDeleteSupplierPayment } from '@/hooks/useSupplierPaymentOperations';
 import { format } from 'date-fns';
-import { Plus, CreditCard, FileText, TrendingUp, Phone, Mail, MapPin } from 'lucide-react';
+import { Plus, CreditCard, FileText, Phone, Mail, MapPin, Pencil, Trash2 } from 'lucide-react';
 import type { Supplier } from '@/hooks/useSuppliers';
+import { toast } from 'sonner';
 
 interface SupplierDetailsDialogProps {
   supplier: Supplier | null;
@@ -26,10 +27,12 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
   const [paymentMode, setPaymentMode] = useState('cash');
   const [paymentNotes, setPaymentNotes] = useState('');
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   
   const { data: supplierDetails, isLoading } = useSupplierWithDetails(supplier?.id || null);
   const { data: payments } = useSupplierPayments(supplier?.id || null);
   const createPayment = useCreateSupplierPayment();
+  const deletePayment = useDeleteSupplierPayment();
 
   const handleAddPayment = async () => {
     if (!supplier || !paymentAmount) return;
@@ -46,6 +49,21 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
     setPaymentNotes('');
     setSelectedPurchaseId(null);
     setShowPaymentForm(false);
+    setEditingPaymentId(null);
+  };
+
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!supplier) return;
+    await deletePayment.mutateAsync({ id: paymentId, supplierId: supplier.id });
+  };
+
+  const handleEditPayment = (payment: any) => {
+    setEditingPaymentId(payment.id);
+    setPaymentAmount(payment.amount.toString());
+    setPaymentMode(payment.payment_mode);
+    setPaymentNotes(payment.notes || '');
+    setSelectedPurchaseId(payment.purchase_id);
+    setShowPaymentForm(true);
   };
 
   if (!supplier) return null;
@@ -146,7 +164,7 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
 
           <TabsContent value="payments" className="space-y-3">
             <div className="flex justify-end">
-              <Button size="sm" onClick={() => setShowPaymentForm(!showPaymentForm)} className="gap-1">
+              <Button size="sm" onClick={() => { setShowPaymentForm(!showPaymentForm); setEditingPaymentId(null); setPaymentAmount(''); setPaymentNotes(''); }} className="gap-1">
                 <Plus className="w-3 h-3" />
                 Add Payment
               </Button>
@@ -175,20 +193,12 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
                     )}
                     <div className="space-y-1">
                       <Label className="text-xs">Amount ₹</Label>
-                      <Input 
-                        type="number" 
-                        value={paymentAmount} 
-                        onChange={(e) => setPaymentAmount(e.target.value)} 
-                        placeholder="0.00"
-                        className="h-8"
-                      />
+                      <Input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} placeholder="0.00" className="h-8" />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Payment Mode</Label>
                       <Select value={paymentMode} onValueChange={setPaymentMode}>
-                        <SelectTrigger className="h-8">
-                          <SelectValue />
-                        </SelectTrigger>
+                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="cash">Cash</SelectItem>
                           <SelectItem value="upi">UPI</SelectItem>
@@ -199,18 +209,13 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs">Notes</Label>
-                      <Input 
-                        value={paymentNotes} 
-                        onChange={(e) => setPaymentNotes(e.target.value)} 
-                        placeholder="Optional notes..."
-                        className="h-8"
-                      />
+                      <Input value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="Optional notes..." className="h-8" />
                     </div>
                   </div>
                   <div className="flex gap-2 justify-end">
-                    <Button variant="outline" size="sm" onClick={() => setShowPaymentForm(false)}>Cancel</Button>
+                    <Button variant="outline" size="sm" onClick={() => { setShowPaymentForm(false); setEditingPaymentId(null); }}>Cancel</Button>
                     <Button size="sm" onClick={handleAddPayment} disabled={!paymentAmount || createPayment.isPending}>
-                      {createPayment.isPending ? 'Saving...' : 'Save Payment'}
+                      {createPayment.isPending ? 'Saving...' : editingPaymentId ? 'Update Payment' : 'Save Payment'}
                     </Button>
                   </div>
                 </CardContent>
@@ -229,6 +234,7 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
                       <TableHead>Mode</TableHead>
                       <TableHead className="text-right">Amount ₹</TableHead>
                       <TableHead>Notes</TableHead>
+                      <TableHead className="w-16">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -245,6 +251,16 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
                         <TableCell className="capitalize">{payment.payment_mode}</TableCell>
                         <TableCell className="text-right font-mono text-primary">₹{payment.amount.toFixed(2)}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">{payment.notes || '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditPayment(payment)}>
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => handleDeletePayment(payment.id)}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

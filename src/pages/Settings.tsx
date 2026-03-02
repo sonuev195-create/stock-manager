@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSettings, useUpdateSettings, getReportColumns, setReportColumns, type ReportColumns } from '@/hooks/useSettings';
+import { useTheme } from '@/hooks/useTheme';
 import { 
   ITEM_COLUMNS, 
   INVENTORY_COLUMNS, 
@@ -14,12 +15,13 @@ import {
   SALE_COLUMNS, 
   SUPPLIER_COLUMNS 
 } from '@/lib/exportUtils';
-import { Save, Settings2, FileText, Lock } from 'lucide-react';
+import { Save, Settings2, FileText, Lock, Sun, Moon } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Settings() {
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
+  const { theme, setTheme } = useTheme();
   
   const [businessName, setBusinessName] = useState('');
   const [businessAddress, setBusinessAddress] = useState('');
@@ -118,169 +120,142 @@ export default function Settings() {
         </TabsList>
         
         <TabsContent value="general">
-          <Card>
-            <CardHeader className="py-4">
-              <CardTitle className="text-base">Business Information</CardTitle>
-              <CardDescription className="text-xs">
-                Configure your business details for invoices and reports
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Business Name</Label>
+          <div className="space-y-4">
+            {/* Theme Toggle */}
+            <Card>
+              <CardHeader className="py-4">
+                <CardTitle className="text-base">Appearance</CardTitle>
+                <CardDescription className="text-xs">Choose light or dark theme</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                    <Label className="text-sm">{theme === 'dark' ? 'Dark Mode' : 'Light Mode'}</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Sun className="w-3.5 h-3.5 text-muted-foreground" />
+                    <Switch
+                      checked={theme === 'dark'}
+                      onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+                    />
+                    <Moon className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-4">
+                <CardTitle className="text-base">Business Information</CardTitle>
+                <CardDescription className="text-xs">
+                  Configure your business details for invoices and reports
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Business Name</Label>
+                    <Input value={businessName} onChange={(e) => setBusinessName(e.target.value)} className="h-8 text-sm" placeholder="My Business" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Phone</Label>
+                    <Input value={businessPhone} onChange={(e) => setBusinessPhone(e.target.value)} className="h-8 text-sm" placeholder="+91 9876543210" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Email</Label>
+                    <Input value={businessEmail} onChange={(e) => setBusinessEmail(e.target.value)} className="h-8 text-sm" placeholder="business@example.com" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Address</Label>
+                    <Input value={businessAddress} onChange={(e) => setBusinessAddress(e.target.value)} className="h-8 text-sm" placeholder="123 Main Street, City" />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Invoice Number Prefix</Label>
+                    <Input value={invoicePrefix} onChange={(e) => setInvoicePrefix(e.target.value)} className="h-8 text-sm w-32" placeholder="INV" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Purchase Number Prefix</Label>
+                    <Input value={purchasePrefix} onChange={(e) => setPurchasePrefix(e.target.value)} className="h-8 text-sm w-32" placeholder="PUR" />
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <div>
+                    <Label className="text-sm">Low Stock Alerts</Label>
+                    <p className="text-xs text-muted-foreground">Show alerts when items are low on stock</p>
+                  </div>
+                  <Switch checked={lowStockAlertEnabled} onCheckedChange={setLowStockAlertEnabled} />
+                </div>
+                
+                <div className="space-y-1.5 pt-4 border-t">
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-muted-foreground" />
+                    <Label className="text-sm">Delete Password</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Required for permanent deletion of items, bills, and purchases</p>
                   <Input
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    className="h-8 text-sm"
-                    placeholder="My Business"
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    className="h-8 text-sm w-48"
+                    placeholder="Set delete password"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Phone</Label>
-                  <Input
-                    value={businessPhone}
-                    onChange={(e) => setBusinessPhone(e.target.value)}
-                    className="h-8 text-sm"
-                    placeholder="+91 9876543210"
-                  />
+                
+                <div className="flex justify-end pt-4">
+                  <Button size="sm" className="gap-1" onClick={handleSaveGeneral} disabled={updateSettings.isPending}>
+                    <Save className="w-3.5 h-3.5" />
+                    {updateSettings.isPending ? 'Saving...' : 'Save Settings'}
+                  </Button>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Email</Label>
-                  <Input
-                    value={businessEmail}
-                    onChange={(e) => setBusinessEmail(e.target.value)}
-                    className="h-8 text-sm"
-                    placeholder="business@example.com"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Address</Label>
-                  <Input
-                    value={businessAddress}
-                    onChange={(e) => setBusinessAddress(e.target.value)}
-                    className="h-8 text-sm"
-                    placeholder="123 Main Street, City"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Invoice Number Prefix</Label>
-                  <Input
-                    value={invoicePrefix}
-                    onChange={(e) => setInvoicePrefix(e.target.value)}
-                    className="h-8 text-sm w-32"
-                    placeholder="INV"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Purchase Number Prefix</Label>
-                  <Input
-                    value={purchasePrefix}
-                    onChange={(e) => setPurchasePrefix(e.target.value)}
-                    className="h-8 text-sm w-32"
-                    placeholder="PUR"
-                  />
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between pt-4 border-t">
-                <div>
-                  <Label className="text-sm">Low Stock Alerts</Label>
-                  <p className="text-xs text-muted-foreground">Show alerts when items are low on stock</p>
-                </div>
-                <Switch
-                  checked={lowStockAlertEnabled}
-                  onCheckedChange={setLowStockAlertEnabled}
-                />
-              </div>
-              
-              <div className="space-y-1.5 pt-4 border-t">
-                <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-muted-foreground" />
-                  <Label className="text-sm">Delete Password</Label>
-                </div>
-                <p className="text-xs text-muted-foreground">Required for permanent deletion of items, bills, and purchases</p>
-                <Input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  className="h-8 text-sm w-48"
-                  placeholder="Set delete password"
-                />
-              </div>
-              
-              <div className="flex justify-end pt-4">
-                <Button size="sm" className="gap-1" onClick={handleSaveGeneral} disabled={updateSettings.isPending}>
-                  <Save className="w-3.5 h-3.5" />
-                  {updateSettings.isPending ? 'Saving...' : 'Save Settings'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
         
         <TabsContent value="reports" className="space-y-4">
           <Card>
             <CardHeader className="py-4">
               <CardTitle className="text-base">Items Report Columns</CardTitle>
-              <CardDescription className="text-xs">
-                Select which columns to include when exporting items
-              </CardDescription>
+              <CardDescription className="text-xs">Select which columns to include when exporting items</CardDescription>
             </CardHeader>
-            <CardContent>
-              {renderColumnCheckboxes('items', ITEM_COLUMNS)}
-            </CardContent>
+            <CardContent>{renderColumnCheckboxes('items', ITEM_COLUMNS)}</CardContent>
           </Card>
           
           <Card>
             <CardHeader className="py-4">
               <CardTitle className="text-base">Inventory Report Columns</CardTitle>
-              <CardDescription className="text-xs">
-                Select which columns to include when exporting inventory
-              </CardDescription>
+              <CardDescription className="text-xs">Select which columns to include when exporting inventory</CardDescription>
             </CardHeader>
-            <CardContent>
-              {renderColumnCheckboxes('inventory', INVENTORY_COLUMNS)}
-            </CardContent>
+            <CardContent>{renderColumnCheckboxes('inventory', INVENTORY_COLUMNS)}</CardContent>
           </Card>
           
           <Card>
             <CardHeader className="py-4">
               <CardTitle className="text-base">Sales Report Columns</CardTitle>
-              <CardDescription className="text-xs">
-                Select which columns to include when exporting sales/bills
-              </CardDescription>
+              <CardDescription className="text-xs">Select which columns to include when exporting sales/bills</CardDescription>
             </CardHeader>
-            <CardContent>
-              {renderColumnCheckboxes('sales', SALE_COLUMNS)}
-            </CardContent>
+            <CardContent>{renderColumnCheckboxes('sales', SALE_COLUMNS)}</CardContent>
           </Card>
           
           <Card>
             <CardHeader className="py-4">
               <CardTitle className="text-base">Purchase Report Columns</CardTitle>
-              <CardDescription className="text-xs">
-                Select which columns to include when exporting purchases
-              </CardDescription>
+              <CardDescription className="text-xs">Select which columns to include when exporting purchases</CardDescription>
             </CardHeader>
-            <CardContent>
-              {renderColumnCheckboxes('purchases', PURCHASE_COLUMNS)}
-            </CardContent>
+            <CardContent>{renderColumnCheckboxes('purchases', PURCHASE_COLUMNS)}</CardContent>
           </Card>
           
           <Card>
             <CardHeader className="py-4">
               <CardTitle className="text-base">Suppliers Report Columns</CardTitle>
-              <CardDescription className="text-xs">
-                Select which columns to include when exporting suppliers
-              </CardDescription>
+              <CardDescription className="text-xs">Select which columns to include when exporting suppliers</CardDescription>
             </CardHeader>
-            <CardContent>
-              {renderColumnCheckboxes('suppliers', SUPPLIER_COLUMNS)}
-            </CardContent>
+            <CardContent>{renderColumnCheckboxes('suppliers', SUPPLIER_COLUMNS)}</CardContent>
           </Card>
           
           <div className="flex justify-end">

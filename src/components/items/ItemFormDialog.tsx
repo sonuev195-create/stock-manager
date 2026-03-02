@@ -40,6 +40,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
     conversion_mode: 'permanent' as 'permanent' | 'batch_wise',
     current_selling_price: 0,
     low_stock_threshold: 10,
+    batch_priority: 'fifo' as 'fifo' | 'lifo',
   });
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
         conversion_mode: (editItem as any).conversion_mode || 'permanent',
         current_selling_price: editItem.current_selling_price,
         low_stock_threshold: editItem.low_stock_threshold || 10,
+        batch_priority: (editItem as any).batch_priority || 'fifo',
       });
     } else {
       setFormData({
@@ -68,6 +70,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
         conversion_mode: 'permanent',
         current_selling_price: 0,
         low_stock_threshold: 10,
+        batch_priority: 'fifo',
       });
     }
   }, [editItem, open]);
@@ -96,6 +99,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
       conversion_mode: formData.unit_type !== 'piece' ? formData.conversion_mode : 'permanent',
       current_selling_price: formData.current_selling_price,
       low_stock_threshold: formData.low_stock_threshold,
+      batch_priority: formData.batch_priority,
     };
 
     if (editItem) {
@@ -208,7 +212,6 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
                 </div>
               </div>
 
-              {/* To and Fro conversion display */}
               <div className="flex items-center gap-2 text-xs text-muted-foreground bg-accent/50 p-2 rounded-md">
                 <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
                 <span>
@@ -218,7 +221,6 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
                 </span>
               </div>
 
-              {/* Conversion mode toggle */}
               <div className="flex items-center justify-between bg-accent/30 p-2 rounded-md">
                 <div>
                   <Label className="text-xs font-medium">Conversion Ratio Mode</Label>
@@ -261,6 +263,26 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
                 className="h-8 text-sm"
                 placeholder="10"
               />
+            </div>
+          </div>
+
+          {/* Batch Priority */}
+          <div className="flex items-center justify-between bg-accent/30 p-2 rounded-md">
+            <div>
+              <Label className="text-xs font-medium">Batch Priority</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {formData.batch_priority === 'fifo' 
+                  ? 'Oldest stock used first (FIFO)' 
+                  : 'Latest stock used first (LIFO)'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">FIFO</span>
+              <Switch
+                checked={formData.batch_priority === 'lifo'}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, batch_priority: checked ? 'lifo' : 'fifo' }))}
+              />
+              <span className="text-xs text-muted-foreground">LIFO</span>
             </div>
           </div>
 

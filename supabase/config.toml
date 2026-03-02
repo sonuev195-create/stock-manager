@@ -1,1 +1,4 @@
 project_id = "omzcfktpipclrghanipx"
+
+[functions.scan-bill]
+verify_jwt = false
