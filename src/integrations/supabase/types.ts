@@ -111,6 +111,7 @@ export type Database = {
           name: string
           primary_unit: string
           secondary_unit: string | null
+          shortword: string | null
           sort_order: number
           unit_type: Database["public"]["Enums"]["unit_type"]
           updated_at: string
@@ -128,6 +129,7 @@ export type Database = {
           name: string
           primary_unit?: string
           secondary_unit?: string | null
+          shortword?: string | null
           sort_order?: number
           unit_type?: Database["public"]["Enums"]["unit_type"]
           updated_at?: string
@@ -145,6 +147,7 @@ export type Database = {
           name?: string
           primary_unit?: string
           secondary_unit?: string | null
+          shortword?: string | null
           sort_order?: number
           unit_type?: Database["public"]["Enums"]["unit_type"]
           updated_at?: string

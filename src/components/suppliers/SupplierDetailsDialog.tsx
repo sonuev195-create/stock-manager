@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,8 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSupplierWithDetails } from '@/hooks/useSupplierPayments';
 import { useSupplierPayments, useCreateSupplierPayment, useDeleteSupplierPayment } from '@/hooks/useSupplierPaymentOperations';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Plus, CreditCard, FileText, Phone, Mail, MapPin, Pencil, Trash2 } from 'lucide-react';
+import { Plus, CreditCard, FileText, Phone, Mail, MapPin, Pencil, Trash2, Wallet } from 'lucide-react';
 import type { Supplier } from '@/hooks/useSuppliers';
 import { toast } from 'sonner';
 
@@ -28,33 +30,108 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
   const [paymentNotes, setPaymentNotes] = useState('');
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [isAdvancePayment, setIsAdvancePayment] = useState(false);
   
   const { data: supplierDetails, isLoading } = useSupplierWithDetails(supplier?.id || null);
   const { data: payments } = useSupplierPayments(supplier?.id || null);
   const createPayment = useCreateSupplierPayment();
   const deletePayment = useDeleteSupplierPayment();
+  const queryClient = useQueryClient();
 
   const handleAddPayment = async () => {
     if (!supplier || !paymentAmount) return;
     
-    await createPayment.mutateAsync({
-      supplier_id: supplier.id,
-      purchase_id: supplier.payment_type === 'bill-wise' ? selectedPurchaseId : null,
-      amount: parseFloat(paymentAmount),
-      payment_mode: paymentMode,
-      notes: paymentNotes || null,
-    });
+    const amount = parseFloat(paymentAmount);
+
+    if (isAdvancePayment) {
+      // Advance payment - no purchase linked
+      await createPayment.mutateAsync({
+        supplier_id: supplier.id,
+        purchase_id: null,
+        amount,
+        payment_mode: paymentMode,
+        notes: paymentNotes || 'Advance Payment',
+      });
+    } else if (supplier.payment_type === 'bill-wise' && selectedPurchaseId) {
+      // Bill-wise payment with carry-over logic
+      let remaining = amount;
+      const purchases = supplierDetails?.purchases?.filter(p => p.due_amount > 0) || [];
+      
+      // Find the selected purchase first
+      const selectedIdx = purchases.findIndex(p => p.id === selectedPurchaseId);
+      if (selectedIdx === -1) return;
+      
+      // Start from selected purchase, carry over to next bills
+      for (let i = selectedIdx; i < purchases.length && remaining > 0; i++) {
+        const purchase = purchases[i];
+        const payForThis = Math.min(remaining, purchase.due_amount);
+        
+        await createPayment.mutateAsync({
+          supplier_id: supplier.id,
+          purchase_id: purchase.id,
+          amount: payForThis,
+          payment_mode: paymentMode,
+          notes: i === selectedIdx ? (paymentNotes || null) : `Carry-over from ${purchases[selectedIdx].purchase_number}`,
+        });
+        
+        remaining -= payForThis;
+      }
+      
+      // If there's still remaining after all bills, create advance payment
+      if (remaining > 0) {
+        await createPayment.mutateAsync({
+          supplier_id: supplier.id,
+          purchase_id: null,
+          amount: remaining,
+          payment_mode: paymentMode,
+          notes: `Advance - excess from ${purchases[selectedIdx].purchase_number}`,
+        });
+        toast.info(`₹${remaining.toFixed(2)} recorded as advance payment`);
+      }
+    } else {
+      // Total payment mode
+      await createPayment.mutateAsync({
+        supplier_id: supplier.id,
+        purchase_id: null,
+        amount,
+        payment_mode: paymentMode,
+        notes: paymentNotes || null,
+      });
+    }
     
     setPaymentAmount('');
     setPaymentNotes('');
     setSelectedPurchaseId(null);
     setShowPaymentForm(false);
     setEditingPaymentId(null);
+    setIsAdvancePayment(false);
   };
 
   const handleDeletePayment = async (paymentId: string) => {
     if (!supplier) return;
+    
+    // Get payment details to reverse purchase paid_amount
+    const payment = payments?.find(p => p.id === paymentId);
+    if (payment?.purchase_id) {
+      const { data: purchase } = await supabase
+        .from('purchases')
+        .select('paid_amount, total_amount')
+        .eq('id', payment.purchase_id)
+        .single();
+      
+      if (purchase) {
+        const newPaid = Math.max(0, (purchase.paid_amount || 0) - payment.amount);
+        const status = newPaid >= purchase.total_amount ? 'paid' : newPaid > 0 ? 'partial' : 'unpaid';
+        await supabase
+          .from('purchases')
+          .update({ paid_amount: newPaid, payment_status: status })
+          .eq('id', payment.purchase_id);
+      }
+    }
+    
     await deletePayment.mutateAsync({ id: paymentId, supplierId: supplier.id });
+    queryClient.invalidateQueries({ queryKey: ['purchases'] });
+    queryClient.invalidateQueries({ queryKey: ['suppliers-with-totals'] });
   };
 
   const handleEditPayment = (payment: any) => {
@@ -64,7 +141,16 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
     setPaymentNotes(payment.notes || '');
     setSelectedPurchaseId(payment.purchase_id);
     setShowPaymentForm(true);
+    setIsAdvancePayment(!payment.purchase_id);
   };
+
+  // Calculate advance payments
+  const advanceTotal = useMemo(() => {
+    if (!payments) return 0;
+    return payments
+      .filter(p => !p.purchase_id && (p.notes || '').toLowerCase().includes('advance'))
+      .reduce((sum, p) => sum + p.amount, 0);
+  }, [payments]);
 
   if (!supplier) return null;
 
@@ -81,7 +167,7 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
         </DialogHeader>
 
         {/* Supplier Info Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
           <Card>
             <CardHeader className="py-2 px-3">
               <CardTitle className="text-xs text-muted-foreground">Total Purchases</CardTitle>
@@ -106,6 +192,16 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
               <div className="text-xl font-bold text-destructive">₹{supplierDetails?.due_amount?.toFixed(2) || '0.00'}</div>
             </CardContent>
           </Card>
+          {advanceTotal > 0 && (
+            <Card>
+              <CardHeader className="py-2 px-3">
+                <CardTitle className="text-xs text-muted-foreground">Advance</CardTitle>
+              </CardHeader>
+              <CardContent className="py-2 px-3">
+                <div className="text-xl font-bold text-emerald-500">₹{advanceTotal.toFixed(2)}</div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Contact Info */}
@@ -163,8 +259,12 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
           </TabsContent>
 
           <TabsContent value="payments" className="space-y-3">
-            <div className="flex justify-end">
-              <Button size="sm" onClick={() => { setShowPaymentForm(!showPaymentForm); setEditingPaymentId(null); setPaymentAmount(''); setPaymentNotes(''); }} className="gap-1">
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={() => { setIsAdvancePayment(true); setShowPaymentForm(true); setEditingPaymentId(null); setPaymentAmount(''); setPaymentNotes(''); }} className="gap-1">
+                <Wallet className="w-3 h-3" />
+                Advance Payment
+              </Button>
+              <Button size="sm" onClick={() => { setShowPaymentForm(!showPaymentForm); setEditingPaymentId(null); setPaymentAmount(''); setPaymentNotes(''); setIsAdvancePayment(false); }} className="gap-1">
                 <Plus className="w-3 h-3" />
                 Add Payment
               </Button>
@@ -173,8 +273,11 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
             {showPaymentForm && (
               <Card className="border-primary">
                 <CardContent className="pt-4 space-y-3">
+                  <div className="text-sm font-medium">
+                    {isAdvancePayment ? '💰 Advance Payment' : editingPaymentId ? 'Edit Payment' : 'New Payment'}
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {supplier.payment_type === 'bill-wise' && supplierDetails?.purchases && (
+                    {!isAdvancePayment && supplier.payment_type === 'bill-wise' && supplierDetails?.purchases && (
                       <div className="space-y-1">
                         <Label className="text-xs">Against Purchase</Label>
                         <Select value={selectedPurchaseId || ''} onValueChange={setSelectedPurchaseId}>
@@ -189,6 +292,7 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
                             ))}
                           </SelectContent>
                         </Select>
+                        <p className="text-xs text-muted-foreground">Excess amount will carry over to next bills or become advance</p>
                       </div>
                     )}
                     <div className="space-y-1">
@@ -213,7 +317,7 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
                     </div>
                   </div>
                   <div className="flex gap-2 justify-end">
-                    <Button variant="outline" size="sm" onClick={() => { setShowPaymentForm(false); setEditingPaymentId(null); }}>Cancel</Button>
+                    <Button variant="outline" size="sm" onClick={() => { setShowPaymentForm(false); setEditingPaymentId(null); setIsAdvancePayment(false); }}>Cancel</Button>
                     <Button size="sm" onClick={handleAddPayment} disabled={!paymentAmount || createPayment.isPending}>
                       {createPayment.isPending ? 'Saving...' : editingPaymentId ? 'Update Payment' : 'Save Payment'}
                     </Button>
@@ -245,7 +349,9 @@ export function SupplierDetailsDialog({ supplier, open, onOpenChange }: Supplier
                           {payment.purchases ? (
                             <Badge variant="outline">{payment.purchases.purchase_number}</Badge>
                           ) : (
-                            <span className="text-muted-foreground">General</span>
+                            <Badge variant="secondary">
+                              {(payment.notes || '').toLowerCase().includes('advance') ? 'Advance' : 'General'}
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell className="capitalize">{payment.payment_mode}</TableCell>

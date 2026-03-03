@@ -6,14 +6,123 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useItems, useDeleteItem, useUpdateItem, type ItemWithCategory } from '@/hooks/useItems';
+import { useBatchesByItem } from '@/hooks/useBatches';
 import { useCategories } from '@/hooks/useCategories';
+import { supabase } from '@/integrations/supabase/client';
 import { CategoryDialog } from '@/components/items/CategoryDialog';
 import { ItemFormDialog } from '@/components/items/ItemFormDialog';
 import { BulkUploadDialog } from '@/components/items/BulkUploadDialog';
 import { ItemBatchesDialog } from '@/components/items/ItemBatchesDialog';
 import { DeleteDialog } from '@/components/common/DeleteDialog';
 import { BulkPriceEditDialog } from '@/components/items/BulkPriceEditDialog';
-import { Search, Plus, Pencil, Trash2, Package, ChevronDown, ArrowUp, ArrowDown, DollarSign } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Package, ChevronDown, ArrowUp, ArrowDown, DollarSign, Edit2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+
+function BulkEditDialog({ open, onOpenChange, items }: { open: boolean; onOpenChange: (open: boolean) => void; items: ItemWithCategory[] }) {
+  const [editData, setEditData] = useState<Record<string, { name: string; item_code: string; shortword: string; current_selling_price: number }>>({});
+  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+
+  useState(() => {
+    const data: Record<string, any> = {};
+    items.forEach(item => {
+      data[item.id] = {
+        name: item.name,
+        item_code: item.item_code,
+        shortword: (item as any).shortword || '',
+        current_selling_price: item.current_selling_price,
+      };
+    });
+    setEditData(data);
+  });
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      for (const [id, data] of Object.entries(editData)) {
+        await supabase.from('items').update({
+          name: data.name,
+          item_code: data.item_code,
+          shortword: data.shortword || null,
+          current_selling_price: data.current_selling_price,
+        }).eq('id', id);
+      }
+      queryClient.invalidateQueries({ queryKey: ['items'] });
+      toast.success(`${Object.keys(editData).length} items updated`);
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Bulk Edit Items</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-auto border rounded-md">
+          <Table className="data-table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Code</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Shortword</TableHead>
+                <TableHead>Price ₹</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map(item => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <Input
+                      value={editData[item.id]?.item_code || ''}
+                      onChange={(e) => setEditData(prev => ({ ...prev, [item.id]: { ...prev[item.id], item_code: e.target.value } }))}
+                      className="h-7 w-24 text-xs font-mono"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={editData[item.id]?.name || ''}
+                      onChange={(e) => setEditData(prev => ({ ...prev, [item.id]: { ...prev[item.id], name: e.target.value } }))}
+                      className="h-7 text-xs"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={editData[item.id]?.shortword || ''}
+                      onChange={(e) => setEditData(prev => ({ ...prev, [item.id]: { ...prev[item.id], shortword: e.target.value } }))}
+                      className="h-7 w-24 text-xs"
+                      placeholder="OCR word"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      value={editData[item.id]?.current_selling_price || 0}
+                      onChange={(e) => setEditData(prev => ({ ...prev, [item.id]: { ...prev[item.id], current_selling_price: parseFloat(e.target.value) || 0 } }))}
+                      className="h-7 w-20 text-xs"
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving...' : `Update ${items.length} Items`}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function Items() {
   const [search, setSearch] = useState('');
@@ -24,6 +133,7 @@ export default function Items() {
   const [viewBatchesItem, setViewBatchesItem] = useState<ItemWithCategory | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkPriceEdit, setShowBulkPriceEdit] = useState(false);
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
 
   const { data: items, isLoading } = useItems();
   const { data: categories } = useCategories();
@@ -36,7 +146,8 @@ export default function Items() {
     let filtered = items.filter(item => {
       const matchesSearch = search === '' || 
         item.name.toLowerCase().includes(search.toLowerCase()) ||
-        item.item_code.toLowerCase().includes(search.toLowerCase());
+        item.item_code.toLowerCase().includes(search.toLowerCase()) ||
+        ((item as any).shortword || '').toLowerCase().includes(search.toLowerCase());
       
       const matchesCategory = categoryFilter === 'all' || item.category_id === categoryFilter;
       
@@ -74,6 +185,20 @@ export default function Items() {
     if (stock <= 0) return 'out-of-stock';
     if (stock <= threshold) return 'low-stock';
     return 'text-profit';
+  };
+
+  // Calculate correct secondary stock - need to sum batch-level secondary quantities
+  const getSecondaryStock = (item: ItemWithCategory) => {
+    // For permanent conversion mode, use item conversion factor
+    if (item.unit_type === 'piece' || !item.secondary_unit) return null;
+    if ((item as any).conversion_mode === 'batch_wise') {
+      // Can't calculate exactly without batch data, show "varies"
+      return null;
+    }
+    if (item.conversion_factor && item.conversion_factor !== 1) {
+      return (item.total_stock || 0) * item.conversion_factor;
+    }
+    return null;
   };
 
   return (
@@ -122,6 +247,10 @@ export default function Items() {
             <DollarSign className="w-3 h-3" />
             Bulk Price Edit
           </Button>
+          <Button variant="outline" size="sm" className="h-7 gap-1" onClick={() => setShowBulkEdit(true)}>
+            <Edit2 className="w-3 h-3" />
+            Bulk Edit
+          </Button>
           <Button variant="ghost" size="sm" className="h-7 ml-auto" onClick={() => setSelectedIds(new Set())}>
             Clear Selection
           </Button>
@@ -166,9 +295,7 @@ export default function Items() {
             ) : (
               filteredItems.map((item, idx) => {
                 const primaryStock = item.total_stock || 0;
-                const secondaryStock = item.conversion_factor && item.secondary_unit
-                  ? primaryStock * item.conversion_factor
-                  : null;
+                const secondaryStock = getSecondaryStock(item);
                 
                 return (
                   <TableRow key={item.id} className={selectedIds.has(item.id) ? 'bg-muted/50' : ''}>
@@ -194,7 +321,14 @@ export default function Items() {
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs">{item.item_code}</TableCell>
-                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell>
+                      <div>
+                        <span className="font-medium">{item.name}</span>
+                        {(item as any).shortword && (
+                          <span className="text-xs text-muted-foreground ml-1">({(item as any).shortword})</span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {item.categories?.name ? (
                         <Badge variant="secondary" className="text-xs">{item.categories.name}</Badge>
@@ -277,6 +411,14 @@ export default function Items() {
         selectedItems={filteredItems.filter(i => selectedIds.has(i.id))}
         allItems={filteredItems}
       />
+
+      {showBulkEdit && (
+        <BulkEditDialog
+          open={showBulkEdit}
+          onOpenChange={setShowBulkEdit}
+          items={filteredItems.filter(i => selectedIds.has(i.id))}
+        />
+      )}
     </div>
   );
 }

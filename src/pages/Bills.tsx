@@ -15,6 +15,7 @@ import { ExportButton } from '@/components/common/ExportButton';
 import { SALE_COLUMNS } from '@/lib/exportUtils';
 import { getReportColumns } from '@/hooks/useSettings';
 import { BulkSaleUploadDialog } from '@/components/sales/BulkSaleUploadDialog';
+import { useNavigate } from 'react-router-dom';
 import { 
   format, startOfDay, endOfDay, subDays, isWithinInterval, 
   startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
@@ -86,7 +87,7 @@ function SaleDetailDialog({ sale, open, onOpenChange }: { sale: SaleWithDetails 
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="text-xs">{si.batches?.batch_name.split('/')[0]}</Badge>
+                    <Badge variant="outline" className="text-xs">{si.batches?.batch_name}</Badge>
                   </TableCell>
                   <TableCell className="text-right">{si.quantity_primary} {si.items?.primary_unit}</TableCell>
                   <TableCell className="text-right">
@@ -153,6 +154,7 @@ export default function Bills() {
   const [viewSale, setViewSale] = useState<SaleWithDetails | null>(null);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SaleWithDetails | null>(null);
+  const navigate = useNavigate();
   
   const { data: sales, isLoading } = useSales();
   const deleteSaleMutation = useDeleteSale();
@@ -162,12 +164,12 @@ export default function Bills() {
   const getFinancialYearStart = () => {
     const now = new Date();
     const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-    return new Date(fyYear, 3, 1); // April 1
+    return new Date(fyYear, 3, 1);
   };
 
   const getFinancialYearEnd = () => {
     const fyStart = getFinancialYearStart();
-    return new Date(fyStart.getFullYear() + 1, 2, 31); // March 31
+    return new Date(fyStart.getFullYear() + 1, 2, 31);
   };
 
   const filteredSales = useMemo(() => {
@@ -183,45 +185,21 @@ export default function Bills() {
       const now = new Date();
       
       if (dateFilter === 'today') {
-        matchesDate = isWithinInterval(saleDate, {
-          start: startOfDay(now),
-          end: endOfDay(now),
-        });
+        matchesDate = isWithinInterval(saleDate, { start: startOfDay(now), end: endOfDay(now) });
       } else if (dateFilter === 'week') {
-        matchesDate = isWithinInterval(saleDate, {
-          start: startOfWeek(now, { weekStartsOn: 1 }),
-          end: endOfWeek(now, { weekStartsOn: 1 }),
-        });
+        matchesDate = isWithinInterval(saleDate, { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) });
       } else if (dateFilter === 'month') {
-        matchesDate = isWithinInterval(saleDate, {
-          start: startOfMonth(now),
-          end: endOfMonth(now),
-        });
+        matchesDate = isWithinInterval(saleDate, { start: startOfMonth(now), end: endOfMonth(now) });
       } else if (dateFilter === 'year') {
-        matchesDate = isWithinInterval(saleDate, {
-          start: startOfYear(now),
-          end: endOfYear(now),
-        });
+        matchesDate = isWithinInterval(saleDate, { start: startOfYear(now), end: endOfYear(now) });
       } else if (dateFilter === 'financial') {
-        matchesDate = isWithinInterval(saleDate, {
-          start: getFinancialYearStart(),
-          end: getFinancialYearEnd(),
-        });
+        matchesDate = isWithinInterval(saleDate, { start: getFinancialYearStart(), end: getFinancialYearEnd() });
       } else if (dateFilter === 'last30') {
-        matchesDate = isWithinInterval(saleDate, {
-          start: startOfDay(subDays(now, 30)),
-          end: endOfDay(now),
-        });
+        matchesDate = isWithinInterval(saleDate, { start: startOfDay(subDays(now, 30)), end: endOfDay(now) });
       } else if (dateFilter === 'last3months') {
-        matchesDate = isWithinInterval(saleDate, {
-          start: startOfDay(subMonths(now, 3)),
-          end: endOfDay(now),
-        });
+        matchesDate = isWithinInterval(saleDate, { start: startOfDay(subMonths(now, 3)), end: endOfDay(now) });
       } else if (dateFilter === 'custom' && customDateRange?.from) {
-        matchesDate = isWithinInterval(saleDate, {
-          start: startOfDay(customDateRange.from),
-          end: endOfDay(customDateRange.to || customDateRange.from),
-        });
+        matchesDate = isWithinInterval(saleDate, { start: startOfDay(customDateRange.from), end: endOfDay(customDateRange.to || customDateRange.from) });
       }
       
       return matchesSearch && matchesDate;
@@ -235,6 +213,30 @@ export default function Bills() {
     amount: filteredSales.reduce((sum, s) => sum + s.total_amount, 0),
     profit: filteredSales.reduce((sum, s) => sum + s.total_profit, 0),
   }), [filteredSales]);
+
+  const renderSaleRow = (sale: SaleWithDetails) => (
+    <TableRow key={sale.id}>
+      <TableCell className="font-mono text-xs">{sale.sale_number}</TableCell>
+      <TableCell className="text-xs">{format(new Date(sale.sale_date), viewMode === 'daywise' ? 'HH:mm' : 'dd MMM yyyy HH:mm')}</TableCell>
+      <TableCell>{sale.customer_name || '-'}</TableCell>
+      <TableCell><Badge variant="secondary" className="text-xs">{sale.sale_items.length}</Badge></TableCell>
+      <TableCell className="text-right font-mono">₹{sale.total_amount}</TableCell>
+      {showProfit && <TableCell className="text-right font-mono text-emerald-500">₹{sale.total_profit}</TableCell>}
+      <TableCell>
+        <div className="flex gap-0.5">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)}>
+            <Eye className="w-3 h-3" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigate(`/sales/edit/${sale.id}`)}>
+            <Edit2 className="w-3 h-3" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(sale)}>
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 
   return (
     <div className="space-y-4">
@@ -281,12 +283,7 @@ export default function Bills() {
       <div className="flex gap-3 flex-wrap items-center">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by bill # or customer..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-sm"
-          />
+          <Input placeholder="Search by bill # or customer..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-8 h-8 text-sm" />
         </div>
         <Select value={dateFilter} onValueChange={setDateFilter}>
           <SelectTrigger className="w-[160px] h-8 text-sm">
@@ -312,24 +309,13 @@ export default function Bills() {
               <Button variant="outline" size="sm" className="h-8 text-xs">
                 {customDateRange?.from ? (
                   customDateRange.to ? (
-                    <>
-                      {format(customDateRange.from, 'dd/MM/yy')} - {format(customDateRange.to, 'dd/MM/yy')}
-                    </>
-                  ) : (
-                    format(customDateRange.from, 'dd/MM/yy')
-                  )
-                ) : (
-                  'Select dates'
-                )}
+                    <>{format(customDateRange.from, 'dd/MM/yy')} - {format(customDateRange.to, 'dd/MM/yy')}</>
+                  ) : format(customDateRange.from, 'dd/MM/yy')
+                ) : 'Select dates'}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <CalendarComponent
-                mode="range"
-                selected={customDateRange}
-                onSelect={setCustomDateRange}
-                numberOfMonths={2}
-              />
+              <CalendarComponent mode="range" selected={customDateRange} onSelect={setCustomDateRange} numberOfMonths={2} />
             </PopoverContent>
           </Popover>
         )}
@@ -362,9 +348,7 @@ export default function Bills() {
                     <div className="flex gap-4 text-sm">
                       <span>{group.sales.length} bills</span>
                       <span className="font-mono">₹{group.totalAmount.toFixed(0)}</span>
-                      {showProfit && (
-                        <span className="text-emerald-500 font-mono">+₹{group.totalProfit.toFixed(0)}</span>
-                      )}
+                      {showProfit && <span className="text-emerald-500 font-mono">+₹{group.totalProfit.toFixed(0)}</span>}
                     </div>
                   </div>
                 </CardHeader>
@@ -378,30 +362,11 @@ export default function Bills() {
                         <TableHead>Items</TableHead>
                         <TableHead className="text-right">Total</TableHead>
                         {showProfit && <TableHead className="text-right">Profit</TableHead>}
-                        <TableHead className="w-12"></TableHead>
+                        <TableHead className="w-20"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {group.sales.map((sale) => (
-                        <TableRow key={sale.id}>
-                          <TableCell className="font-mono text-xs">{sale.sale_number}</TableCell>
-                          <TableCell className="text-xs">{format(new Date(sale.sale_date), 'HH:mm')}</TableCell>
-                          <TableCell>{sale.customer_name || '-'}</TableCell>
-                          <TableCell><Badge variant="secondary" className="text-xs">{sale.sale_items.length}</Badge></TableCell>
-                          <TableCell className="text-right font-mono">₹{sale.total_amount}</TableCell>
-                          {showProfit && <TableCell className="text-right font-mono text-emerald-500">₹{sale.total_profit}</TableCell>}
-                          <TableCell>
-                            <div className="flex gap-0.5">
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)}>
-                                <Eye className="w-3 h-3" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(sale)}>
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {group.sales.map(renderSaleRow)}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -423,7 +388,7 @@ export default function Bills() {
                 <TableHead>Items</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 {showProfit && <TableHead className="text-right">Profit</TableHead>}
-                <TableHead className="w-12"></TableHead>
+                <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -432,26 +397,7 @@ export default function Bills() {
               ) : filteredSales.length === 0 ? (
                 <TableRow><TableCell colSpan={showProfit ? 7 : 6} className="text-center py-8">No bills found.</TableCell></TableRow>
               ) : (
-                filteredSales.map((sale) => (
-                  <TableRow key={sale.id}>
-                    <TableCell className="font-mono text-xs">{sale.sale_number}</TableCell>
-                    <TableCell>{format(new Date(sale.sale_date), 'dd MMM yyyy HH:mm')}</TableCell>
-                    <TableCell>{sale.customer_name || '-'}</TableCell>
-                    <TableCell><Badge variant="secondary" className="text-xs">{sale.sale_items.length}</Badge></TableCell>
-                    <TableCell className="text-right font-mono">₹{sale.total_amount}</TableCell>
-                    {showProfit && <TableCell className="text-right font-mono text-emerald-500">₹{sale.total_profit}</TableCell>}
-                    <TableCell>
-                      <div className="flex gap-0.5">
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)}>
-                          <Eye className="w-3 h-3" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(sale)}>
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                filteredSales.map(renderSaleRow)
               )}
             </TableBody>
           </Table>
