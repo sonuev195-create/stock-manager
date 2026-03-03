@@ -18,6 +18,7 @@ import { BulkSaleUploadDialog } from '@/components/sales/BulkSaleUploadDialog';
 import { SimpleBulkUploadDialog } from '@/components/sales/SimpleBulkUploadDialog';
 import { PaperBillScanDialog } from '@/components/sales/PaperBillScanDialog';
 import { DeleteDialog } from '@/components/common/DeleteDialog';
+import { useNavigate } from 'react-router-dom';
 
 interface SaleLineItemWithUnits extends SaleLineItem {
   primary_unit: string;
@@ -43,11 +44,23 @@ function QuickSale() {
   const filteredItems = useMemo(() => {
     if (!items) return items || [];
     if (!search) return items.slice(0, 15);
+    const s = search.toLowerCase();
     return items.filter(i => 
-      i.name.toLowerCase().includes(search.toLowerCase()) || 
-      i.item_code.toLowerCase().includes(search.toLowerCase())
+      i.name.toLowerCase().includes(s) || 
+      i.item_code.toLowerCase().includes(s) ||
+      ((i as any).shortword || '').toLowerCase().includes(s)
     ).slice(0, 15);
   }, [items, search]);
+
+  // Sort batches by item's batch_priority
+  const sortedBatches = useMemo(() => {
+    if (!batches || !selectedItem) return batches || [];
+    const priority = (selectedItem as any).batch_priority || 'fifo';
+    const filtered = batches.filter(b => b.remaining_quantity > 0);
+    return priority === 'lifo' 
+      ? filtered.sort((a, b) => b.serial_number - a.serial_number)
+      : filtered.sort((a, b) => a.serial_number - b.serial_number);
+  }, [batches, selectedItem]);
 
   const addItem = (itemId: string) => {
     const item = items?.find(i => i.id === itemId);
@@ -128,7 +141,7 @@ function QuickSale() {
   const totalAmount = subtotal - discount;
   const totalProfit = lineItems.reduce((sum, i) => sum + i.profit, 0) - discount;
 
-  // Proportional discount distribution for display
+  // Proportional discount distribution
   const getItemDiscount = (itemTotal: number) => {
     if (discount <= 0 || subtotal <= 0) return 0;
     return (itemTotal / subtotal) * discount;
@@ -143,18 +156,21 @@ function QuickSale() {
       discount,
       tax: 0,
       total_amount: totalAmount,
-      items: lineItems.map(li => ({
-        item_id: li.item_id,
-        item_name: li.item_name,
-        batch_id: li.batch_id,
-        batch_name: li.batch_name,
-        quantity_primary: li.quantity_primary,
-        quantity_secondary: li.quantity_secondary,
-        rate: li.rate,
-        purchase_price: li.purchase_price,
-        total: li.total,
-        profit: li.profit - getItemDiscount(li.total),
-      })),
+      items: lineItems.map(li => {
+        const itemDisc = getItemDiscount(li.total);
+        return {
+          item_id: li.item_id,
+          item_name: li.item_name,
+          batch_id: li.batch_id,
+          batch_name: li.batch_name,
+          quantity_primary: li.quantity_primary,
+          quantity_secondary: li.quantity_secondary,
+          rate: li.rate,
+          purchase_price: li.purchase_price,
+          total: li.total - itemDisc,
+          profit: li.profit - itemDisc,
+        };
+      }),
     });
     setLineItems([]);
     setDiscount(0);
@@ -162,8 +178,9 @@ function QuickSale() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="lg:col-span-2">
+    <div className="space-y-4">
+      {/* Inline item search - always visible */}
+      <Card>
         <CardHeader className="py-3">
           <CardTitle className="text-sm">Items</CardTitle>
         </CardHeader>
@@ -172,7 +189,7 @@ function QuickSale() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               ref={searchRef}
-              placeholder="Search item by name or code..."
+              placeholder="Search item by name, code or shortword..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setSelectedItemId(''); setShowItemList(true); }}
               onFocus={() => { setShowItemList(true); setSelectedItemId(''); }}
@@ -188,7 +205,10 @@ function QuickSale() {
                   : null;
                 return (
                   <div key={item.id} className="p-2 hover:bg-accent cursor-pointer flex justify-between items-center" onClick={() => addItem(item.id)}>
-                    <span><span className="font-mono text-xs">{item.item_code}</span> - {item.name}</span>
+                    <span>
+                      <span className="font-mono text-xs">{item.item_code}</span> - {item.name}
+                      {(item as any).shortword && <span className="text-xs text-muted-foreground ml-1">({(item as any).shortword})</span>}
+                    </span>
                     <div className="text-right">
                       <Badge variant="outline">{item.total_stock} {item.primary_unit}</Badge>
                       {secondaryStock !== null && item.secondary_unit && (
@@ -201,19 +221,16 @@ function QuickSale() {
             </div>
           )}
 
-          {selectedItemId && batches && selectedItem && (
+          {selectedItemId && sortedBatches && selectedItem && (
             <div className="border rounded-md p-2 space-y-2">
               <div className="flex justify-between items-center">
                 <div className="text-sm font-medium">Select Batch for: {selectedItem.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {selectedItem.primary_unit}{selectedItem.secondary_unit && ` / ${selectedItem.secondary_unit}`}
-                  {selectedItem.conversion_factor && selectedItem.conversion_factor !== 1 && (
-                    <span className="ml-1">(1:{selectedItem.conversion_factor})</span>
-                  )}
+                  {(selectedItem as any).batch_priority === 'lifo' ? 'LIFO' : 'FIFO'} | {selectedItem.primary_unit}{selectedItem.secondary_unit && ` / ${selectedItem.secondary_unit}`}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {batches.filter(b => b.remaining_quantity > 0).map(batch => {
+                {sortedBatches.map(batch => {
                   const effectiveConversion = (batch as any).batch_conversion_factor ?? selectedItem.conversion_factor ?? null;
                   const secondaryRemaining = effectiveConversion && selectedItem.secondary_unit
                     ? batch.remaining_quantity * effectiveConversion
@@ -221,7 +238,7 @@ function QuickSale() {
                   return (
                     <Button key={batch.id} variant="outline" size="sm" className="text-xs h-auto py-1" onClick={() => selectBatch(batch)}>
                       <div className="text-left">
-                        <div>{batch.batch_name.split('/')[0]} @ ₹{batch.selling_price}</div>
+                        <div>{batch.batch_name} @ ₹{batch.selling_price}</div>
                         <div className="text-muted-foreground">
                           {batch.remaining_quantity} {selectedItem.primary_unit}
                           {secondaryRemaining !== null && selectedItem.secondary_unit && (
@@ -264,7 +281,7 @@ function QuickSale() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{item.batch_name.split('/')[0]}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className="text-xs">{item.batch_name}</Badge></TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Input 
@@ -328,7 +345,7 @@ function QuickSale() {
             <Input type="number" value={discount} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} className="h-7 w-24" />
           </div>
           {discount > 0 && (
-            <div className="text-xs text-muted-foreground">Discount distributed proportionally across items</div>
+            <div className="text-xs text-muted-foreground">Discount distributed proportionally across items (reduces total & profit per item)</div>
           )}
           <div className="flex justify-between font-bold text-lg border-t pt-2"><span>Total</span><span className="font-mono">₹{totalAmount.toFixed(2)}</span></div>
           <div className="flex justify-between text-sm text-profit"><TrendingUp className="w-4 h-4" /><span>Profit: ₹{totalProfit.toFixed(2)}</span></div>
@@ -348,6 +365,7 @@ function SalesHistory() {
   const [deleteTarget, setDeleteTarget] = useState<SaleWithDetails | null>(null);
   const { data: sales, isLoading } = useSales();
   const deleteSaleMutation = useDeleteSale();
+  const navigate = useNavigate();
 
   return (
     <div className="space-y-3">
@@ -388,6 +406,9 @@ function SalesHistory() {
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)} title="View">
                         <Eye className="w-3 h-3" />
                       </Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => navigate(`/sales/edit/${sale.id}`)} title="Edit">
+                        <Edit2 className="w-3 h-3" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setDeleteTarget(sale)} title="Delete">
                         <Trash2 className="w-3 h-3" />
                       </Button>
@@ -426,7 +447,7 @@ function SalesHistory() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell><Badge variant="outline">{si.batches?.batch_name.split('/')[0]}</Badge></TableCell>
+                  <TableCell><Badge variant="outline">{si.batches?.batch_name}</Badge></TableCell>
                   <TableCell className="text-right">{si.quantity_primary} {si.items?.primary_unit}</TableCell>
                   <TableCell className="text-right">
                     {si.quantity_secondary ? `${si.quantity_secondary} ${si.items?.secondary_unit || ''}` : '-'}

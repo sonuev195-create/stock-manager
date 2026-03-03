@@ -26,7 +26,7 @@ export function useItems() {
       
       if (error) throw error;
       
-      // Get stock for each item
+      // Get stock for each item from batches (summing batch-level secondary quantities)
       const itemsWithStock = await Promise.all(
         (data || []).map(async (item) => {
           const { data: stockData } = await supabase

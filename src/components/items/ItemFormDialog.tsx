@@ -32,6 +32,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
   const [formData, setFormData] = useState({
     item_code: '',
     name: '',
+    shortword: '',
     category_id: '',
     unit_type: 'piece' as UnitType,
     primary_unit: 'pcs',
@@ -48,6 +49,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
       setFormData({
         item_code: editItem.item_code,
         name: editItem.name,
+        shortword: (editItem as any).shortword || '',
         category_id: editItem.category_id || '',
         unit_type: editItem.unit_type,
         primary_unit: editItem.primary_unit,
@@ -62,6 +64,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
       setFormData({
         item_code: '',
         name: '',
+        shortword: '',
         category_id: '',
         unit_type: 'piece',
         primary_unit: 'pcs',
@@ -91,6 +94,7 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
     const itemData = {
       item_code: formData.item_code,
       name: formData.name,
+      shortword: formData.shortword || null,
       category_id: formData.category_id || null,
       unit_type: formData.unit_type,
       primary_unit: formData.primary_unit,
@@ -113,10 +117,11 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
 
   const isPending = createItem.isPending || updateItem.isPending;
   const inverseConversion = formData.conversion_factor ? (1 / formData.conversion_factor) : 0;
+  const showConversionFactor = formData.unit_type !== 'piece' && formData.conversion_mode === 'permanent';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base">{editItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
         </DialogHeader>
@@ -147,6 +152,15 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
 
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <Label className="text-xs">Shortword (for OCR)</Label>
+              <Input
+                value={formData.shortword}
+                onChange={(e) => setFormData(prev => ({ ...prev, shortword: e.target.value }))}
+                className="h-8 text-sm"
+                placeholder="Short name used in paper bills"
+              />
+            </div>
+            <div>
               <Label className="text-xs">Category</Label>
               <Select
                 value={formData.category_id}
@@ -162,27 +176,28 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label className="text-xs">Unit Type *</Label>
-              <Select
-                value={formData.unit_type}
-                onValueChange={(value) => handleUnitTypeChange(value as UnitType)}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {UNIT_TYPES.map((unit) => (
-                    <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs">Unit Type *</Label>
+            <Select
+              value={formData.unit_type}
+              onValueChange={(value) => handleUnitTypeChange(value as UnitType)}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {UNIT_TYPES.map((unit) => (
+                  <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {formData.unit_type !== 'piece' && (
             <>
-              <div className="grid grid-cols-3 gap-3">
+              <div className={showConversionFactor ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-3"}>
                 <div>
                   <Label className="text-xs">Primary Unit</Label>
                   <Input
@@ -199,27 +214,37 @@ export function ItemFormDialog({ open, onOpenChange, editItem }: ItemFormDialogP
                     className="h-8 text-sm"
                   />
                 </div>
-                <div>
-                  <Label className="text-xs">Conversion Factor</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={formData.conversion_factor}
-                    onChange={(e) => setFormData(prev => ({ ...prev, conversion_factor: parseFloat(e.target.value) || 1 }))}
-                    className="h-8 text-sm"
-                    placeholder="1 primary = ? secondary"
-                  />
-                </div>
+                {showConversionFactor && (
+                  <div>
+                    <Label className="text-xs">Conversion Factor</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.conversion_factor}
+                      onChange={(e) => setFormData(prev => ({ ...prev, conversion_factor: parseFloat(e.target.value) || 1 }))}
+                      className="h-8 text-sm"
+                      placeholder="1 primary = ? secondary"
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-accent/50 p-2 rounded-md">
-                <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  1 {formData.primary_unit} = {formData.conversion_factor} {formData.secondary_unit}
-                  <span className="mx-2">|</span>
-                  1 {formData.secondary_unit} = {inverseConversion.toFixed(4)} {formData.primary_unit}
-                </span>
-              </div>
+              {showConversionFactor && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-accent/50 p-2 rounded-md">
+                  <ArrowRightLeft className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    1 {formData.primary_unit} = {formData.conversion_factor} {formData.secondary_unit}
+                    <span className="mx-2">|</span>
+                    1 {formData.secondary_unit} = {inverseConversion.toFixed(4)} {formData.primary_unit}
+                  </span>
+                </div>
+              )}
+
+              {!showConversionFactor && formData.conversion_mode === 'batch_wise' && (
+                <div className="text-xs text-muted-foreground bg-accent/50 p-2 rounded-md">
+                  Conversion factor is set per batch. Each batch will have its own ratio.
+                </div>
+              )}
 
               <div className="flex items-center justify-between bg-accent/30 p-2 rounded-md">
                 <div>

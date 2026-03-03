@@ -17,6 +17,7 @@ import Sales from "./pages/Sales";
 import Bills from "./pages/Bills";
 import Settings from "./pages/Settings";
 import DailyLedger from "./pages/DailyLedger";
+import SaleEdit from "./pages/SaleEdit";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ function AppRoutes() {
       <Route path="/purchases" element={<ProtectedRoute><Purchases /></ProtectedRoute>} />
       <Route path="/purchases/new" element={<ProtectedRoute><PurchaseForm /></ProtectedRoute>} />
       <Route path="/purchases/:id/edit" element={<ProtectedRoute><PurchaseForm /></ProtectedRoute>} />
+      <Route path="/sales/edit/:id" element={<ProtectedRoute><SaleEdit /></ProtectedRoute>} />
       <Route path="/ledger" element={<ProtectedRoute><DailyLedger /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/install" element={<ProtectedRoute><Install /></ProtectedRoute>} />

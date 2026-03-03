@@ -14,6 +14,7 @@ type UnitType = Database['public']['Enums']['unit_type'];
 interface ParsedItem {
   item_code: string;
   name: string;
+  shortword: string;
   category_name: string;
   unit_type: UnitType;
   primary_unit: string;
@@ -40,12 +41,10 @@ export function BulkUploadDialog() {
     return 'piece';
   };
 
-  // Parse text (handles both CSV and tab-separated from Excel/Sheets)
   const parseText = (text: string) => {
     const lines = text.split('\n').filter(line => line.trim());
     
     const items: ParsedItem[] = lines.map((line, index) => {
-      // Detect if it's tab-separated (Excel/Sheets paste) or comma-separated
       const isTabSeparated = line.includes('\t');
       const separator = isTabSeparated ? '\t' : ',';
       const parts = line.split(separator).map(s => s.trim().replace(/^"|"$/g, ''));
@@ -54,6 +53,7 @@ export function BulkUploadDialog() {
         return {
           item_code: parts[0] || `ITEM${index + 1}`,
           name: '',
+          shortword: '',
           category_name: '',
           unit_type: 'piece' as UnitType,
           primary_unit: 'pcs',
@@ -65,7 +65,8 @@ export function BulkUploadDialog() {
         };
       }
 
-      const [item_code, name, category_name = '', unit_type_str = 'piece', primary_unit = 'pcs', secondary_unit = '', conversion_factor_str = '1', price_str = '0'] = parts;
+      // Format: Code, Name, Shortword, Category, Unit Type, Primary, Secondary, ConvFactor, Price
+      const [item_code, name, shortword = '', category_name = '', unit_type_str = 'piece', primary_unit = 'pcs', secondary_unit = '', conversion_factor_str = '1', price_str = '0'] = parts;
       
       const unit_type = parseUnitType(unit_type_str);
       const conversion_factor = parseFloat(conversion_factor_str) || 1;
@@ -76,6 +77,7 @@ export function BulkUploadDialog() {
       return {
         item_code,
         name,
+        shortword,
         category_name,
         unit_type,
         primary_unit: primary_unit || 'pcs',
@@ -96,12 +98,10 @@ export function BulkUploadDialog() {
     setStep('preview');
   };
 
-  // Handle paste from clipboard (Excel/Sheets support)
   const handlePaste = useCallback(async () => {
     try {
       const text = await navigator.clipboard.readText();
       setBulkText(text);
-      // Auto-parse if it looks like valid data
       if (text.includes('\t') || text.includes(',')) {
         const items = parseText(text);
         if (items.length > 0 && items.some(i => i.isValid)) {
@@ -125,6 +125,7 @@ export function BulkUploadDialog() {
       return {
         item_code: item.item_code,
         name: item.name,
+        shortword: item.shortword || null,
         category_id: category?.id || null,
         unit_type: item.unit_type,
         primary_unit: item.primary_unit,
@@ -144,17 +145,16 @@ export function BulkUploadDialog() {
   const updateParsedItem = (index: number, field: keyof ParsedItem, value: any) => {
     const updated = [...parsedItems];
     (updated[index] as any)[field] = value;
-    // Revalidate
     updated[index].isValid = !!(updated[index].item_code && updated[index].name);
     updated[index].error = updated[index].isValid ? undefined : 'Missing required fields';
     setParsedItems(updated);
   };
 
   const downloadTemplate = () => {
-    const template = `Item Code,Name,Category,Unit Type,Primary Unit,Secondary Unit,Conversion Factor,Selling Price
-ITM001,Rice Basmati,Groceries,kg_number,kg,pcs,1,120
-ITM002,Tiles 2x2,Building,sqft_number,sqft,pcs,4,45
-ITM003,Cement Bag,Building,piece,pcs,,1,380`;
+    const template = `Item Code,Name,Shortword,Category,Unit Type,Primary Unit,Secondary Unit,Conversion Factor,Selling Price
+ITM001,Rice Basmati,Rice,Groceries,kg_number,kg,pcs,1,120
+ITM002,Tiles 2x2,Tile,Building,sqft_number,sqft,pcs,4,45
+ITM003,Cement Bag,Cement,Building,piece,pcs,,1,380`;
     
     const blob = new Blob([template], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -202,16 +202,16 @@ ITM003,Cement Bag,Building,piece,pcs,,1,380`;
               onChange={(e) => setBulkText(e.target.value)}
               placeholder={`Paste from Excel/Sheets (tab-separated) or CSV format:
 
-Item Code,Name,Category,Unit Type,Primary Unit,Secondary Unit,Conversion Factor,Selling Price
-ITM001,Rice Basmati,Groceries,kg_number,kg,pcs,1,120
-ITM002,Tiles 2x2,Building,sqft_number,sqft,pcs,4,45`}
+Item Code,Name,Shortword,Category,Unit Type,Primary Unit,Secondary Unit,Conversion Factor,Selling Price
+ITM001,Rice Basmati,Rice,Groceries,kg_number,kg,pcs,1,120
+ITM002,Tiles 2x2,Tile,Building,sqft_number,sqft,pcs,4,45`}
               className="min-h-[200px] text-sm font-mono"
             />
             
             <div className="text-xs text-muted-foreground space-y-1">
               <p><strong>Supports:</strong> Copy-paste from Excel, Google Sheets, or CSV files</p>
-              <p><strong>Format:</strong> Item Code, Name, Category, Unit Type, Primary Unit, Secondary Unit, Conversion Factor, Selling Price</p>
-              <p><strong>Unit Types:</strong> piece, kg_number, sqft_number</p>
+              <p><strong>Format:</strong> Code, Name, Shortword, Category, Unit Type, Primary Unit, Secondary Unit, Conversion Factor, Price</p>
+              <p><strong>Shortword:</strong> Short name used in paper bills for OCR matching</p>
             </div>
             
             <div className="flex justify-end gap-2">
@@ -243,6 +243,7 @@ ITM002,Tiles 2x2,Building,sqft_number,sqft,pcs,4,45`}
                     <TableHead className="w-8"></TableHead>
                     <TableHead>Code</TableHead>
                     <TableHead>Name</TableHead>
+                    <TableHead>Shortword</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Unit Type</TableHead>
                     <TableHead>Price</TableHead>
@@ -270,6 +271,14 @@ ITM002,Tiles 2x2,Building,sqft_number,sqft,pcs,4,45`}
                           value={item.name}
                           onChange={(e) => updateParsedItem(index, 'name', e.target.value)}
                           className="h-6 text-xs w-40"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={item.shortword}
+                          onChange={(e) => updateParsedItem(index, 'shortword', e.target.value)}
+                          className="h-6 text-xs w-24"
+                          placeholder="OCR"
                         />
                       </TableCell>
                       <TableCell>
