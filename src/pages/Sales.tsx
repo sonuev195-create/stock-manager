@@ -200,9 +200,8 @@ function QuickSale() {
           {showItemList && !selectedItemId && filteredItems.length > 0 && (
             <div className="border rounded-md max-h-48 overflow-auto">
               {filteredItems.map(item => {
-                const secondaryStock = item.conversion_factor && item.secondary_unit 
-                  ? (item.total_stock || 0) * item.conversion_factor 
-                  : null;
+                const showSecondary = item.secondary_unit && item.conversion_factor && item.conversion_factor !== 1 && (item as any).conversion_mode !== 'batch_wise';
+                const secondaryStock = showSecondary ? (item.total_stock || 0) * item.conversion_factor! : null;
                 return (
                   <div key={item.id} className="p-2 hover:bg-accent cursor-pointer flex justify-between items-center" onClick={() => addItem(item.id)}>
                     <span>
@@ -348,7 +347,7 @@ function QuickSale() {
             <div className="text-xs text-muted-foreground">Discount distributed proportionally across items (reduces total & profit per item)</div>
           )}
           <div className="flex justify-between font-bold text-lg border-t pt-2"><span>Total</span><span className="font-mono">₹{totalAmount.toFixed(2)}</span></div>
-          <div className="flex justify-between text-sm text-profit"><TrendingUp className="w-4 h-4" /><span>Profit: ₹{totalProfit.toFixed(2)}</span></div>
+          <div className={`flex justify-between text-sm ${totalProfit >= 0 ? 'text-profit' : 'text-loss'}`}><TrendingUp className="w-4 h-4" /><span>{totalProfit >= 0 ? 'Profit' : 'Loss'}: ₹{Math.abs(totalProfit).toFixed(2)}</span></div>
           <Button className="w-full gap-1" onClick={handleSave} disabled={lineItems.length === 0 || createSale.isPending}>
             <ShoppingCart className="w-4 h-4" />
             {createSale.isPending ? 'Saving...' : 'Complete Sale'}
@@ -400,7 +399,7 @@ function SalesHistory() {
                   <TableCell>{sale.customer_name || '-'}</TableCell>
                   <TableCell><Badge variant="secondary">{sale.sale_items.length}</Badge></TableCell>
                   <TableCell className="text-right font-mono font-medium">₹{sale.total_amount}</TableCell>
-                  {showProfit && <TableCell className="text-right font-mono text-profit">₹{sale.total_profit}</TableCell>}
+                  {showProfit && <TableCell className={`text-right font-mono ${Number(sale.total_profit) >= 0 ? 'text-profit' : 'text-loss'}`}>₹{sale.total_profit}</TableCell>}
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setViewSale(sale)} title="View">

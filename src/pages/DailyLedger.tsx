@@ -227,7 +227,7 @@ export default function DailyLedger() {
                               </TableCell>
                               <TableCell className="py-1 text-xs text-right font-mono">₹{Number(sale.total_amount).toFixed(0)}</TableCell>
                               <TableCell className="py-1 text-xs text-right font-mono">₹{Number(sale.total_amount).toFixed(0)}</TableCell>
-                              <TableCell className="py-1 text-xs text-right font-mono text-emerald-500">₹{Number(sale.total_profit).toFixed(0)}</TableCell>
+                              <TableCell className={`py-1 text-xs text-right font-mono ${Number(sale.total_profit) >= 0 ? 'text-profit' : 'text-loss'}`}>₹{Number(sale.total_profit).toFixed(0)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

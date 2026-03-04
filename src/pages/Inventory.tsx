@@ -130,7 +130,8 @@ export default function Inventory() {
               filteredItems.map((item) => {
                 const status = getStockStatus(item);
                 const totalStock = item.total_stock || 0;
-                const secondaryStock = item.conversion_factor && item.secondary_unit ? totalStock * item.conversion_factor : null;
+                const showSecondary = item.secondary_unit && item.conversion_factor && item.conversion_factor !== 1 && (item as any).conversion_mode !== 'batch_wise';
+                const secondaryStock = showSecondary ? totalStock * item.conversion_factor! : null;
                 return (
                   <TableRow key={item.id}>
                     <TableCell className="font-mono text-xs">{item.item_code}</TableCell>
