@@ -189,16 +189,10 @@ export default function Items() {
 
   // Calculate correct secondary stock - need to sum batch-level secondary quantities
   const getSecondaryStock = (item: ItemWithCategory) => {
-    // For permanent conversion mode, use item conversion factor
-    if (item.unit_type === 'piece' || !item.secondary_unit) return null;
-    if ((item as any).conversion_mode === 'batch_wise') {
-      // Can't calculate exactly without batch data, show "varies"
-      return null;
-    }
-    if (item.conversion_factor && item.conversion_factor !== 1) {
-      return (item.total_stock || 0) * item.conversion_factor;
-    }
-    return null;
+    if (!item.secondary_unit) return null;
+    if ((item as any).conversion_mode === 'batch_wise') return null;
+    if (!item.conversion_factor || item.conversion_factor === 1) return null;
+    return (item.total_stock || 0) * item.conversion_factor;
   };
 
   return (
