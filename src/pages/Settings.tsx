@@ -15,7 +15,10 @@ import {
   SALE_COLUMNS, 
   SUPPLIER_COLUMNS 
 } from '@/lib/exportUtils';
-import { Save, Settings2, FileText, Lock, Sun, Moon } from 'lucide-react';
+import { Save, Settings2, FileText, Lock, Sun, Moon, AlertTriangle, Trash2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 
 export default function Settings() {
