@@ -21,7 +21,7 @@ const mainItems = [
   { title: 'Dashboard', url: '/', icon: Home },
   { title: 'Sales', url: '/sales', icon: ShoppingCart },
   { title: 'Bills', url: '/bills', icon: Receipt },
-  { title: 'Daily Ledger', url: '/ledger', icon: BookOpen },
+  { title: 'Today', url: '/ledger', icon: BookOpen },
   { title: 'Reports', url: '/reports', icon: BarChart3 },
 ];
 

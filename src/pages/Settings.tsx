@@ -15,13 +15,19 @@ import {
   SALE_COLUMNS, 
   SUPPLIER_COLUMNS 
 } from '@/lib/exportUtils';
-import { Save, Settings2, FileText, Lock, Sun, Moon } from 'lucide-react';
+import { Save, Settings2, FileText, Lock, Sun, Moon, AlertTriangle, Trash2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 
 export default function Settings() {
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
   const { theme, setTheme } = useTheme();
+  const queryClient = useQueryClient();
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
   
   const [businessName, setBusinessName] = useState('');
   const [businessAddress, setBusinessAddress] = useState('');
@@ -212,6 +218,74 @@ export default function Settings() {
                     {updateSettings.isPending ? 'Saving...' : 'Save Settings'}
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Danger Zone */}
+            <Card className="border-destructive">
+              <CardHeader className="py-4">
+                <CardTitle className="text-base text-destructive flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  Danger Zone
+                </CardTitle>
+                <CardDescription className="text-xs">Irreversible actions. Proceed with extreme caution.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm" className="gap-1">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Erase All Data
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-destructive">Erase All Data</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete ALL sales, purchases, items, batches, categories, suppliers, and payments. This action cannot be undone.
+                        <br /><br />
+                        Type <strong>ERASE ALL</strong> to confirm:
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <Input
+                      value={resetConfirmText}
+                      onChange={(e) => setResetConfirmText(e.target.value)}
+                      placeholder="Type ERASE ALL"
+                      className="h-8 text-sm"
+                    />
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => setResetConfirmText('')}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={resetConfirmText !== 'ERASE ALL' || isResetting}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={async () => {
+                          setIsResetting(true);
+                          try {
+                            // Delete in order of dependencies
+                            await supabase.from('sale_items').delete().neq('id', '');
+                            await supabase.from('sales').delete().neq('id', '');
+                            await supabase.from('purchase_items').delete().neq('id', '');
+                            await supabase.from('supplier_payments').delete().neq('id', '');
+                            await supabase.from('purchases').delete().neq('id', '');
+                            await supabase.from('batches').delete().neq('id', '');
+                            await supabase.from('items').delete().neq('id', '');
+                            await supabase.from('categories').delete().neq('id', '');
+                            await supabase.from('suppliers').delete().neq('id', '');
+                            queryClient.invalidateQueries();
+                            toast.success('All data has been erased');
+                          } catch (err: any) {
+                            toast.error(`Failed to erase data: ${err.message}`);
+                          } finally {
+                            setIsResetting(false);
+                            setResetConfirmText('');
+                          }
+                        }}
+                      >
+                        {isResetting ? 'Erasing...' : 'Erase Everything'}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
             </Card>
           </div>

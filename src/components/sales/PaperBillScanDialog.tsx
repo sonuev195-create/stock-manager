@@ -254,7 +254,7 @@ export function PaperBillScanDialog({ open, onOpenChange }: PaperBillScanDialogP
                     <TableRow>
                       <TableHead className="w-8">✓</TableHead>
                       <TableHead>Scanned Name</TableHead>
-                      <TableHead>Matched Item</TableHead>
+                      <TableHead className="min-w-[200px]">Matched Item</TableHead>
                       <TableHead className="w-20">Qty</TableHead>
                       <TableHead className="w-24">Amount ₹</TableHead>
                       <TableHead className="w-20">Rate ₹</TableHead>
@@ -282,7 +282,7 @@ export function PaperBillScanDialog({ open, onOpenChange }: PaperBillScanDialogP
                             value={item.matchedItemId || ''}
                             onValueChange={(v) => updateItem(i, 'matchedItemId', v)}
                           >
-                            <SelectTrigger className="h-7 text-xs">
+                            <SelectTrigger className="h-7 text-xs min-w-[180px]">
                               <SelectValue placeholder="Select item..." />
                             </SelectTrigger>
                             <SelectContent>
