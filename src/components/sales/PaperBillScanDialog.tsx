@@ -282,7 +282,7 @@ export function PaperBillScanDialog({ open, onOpenChange }: PaperBillScanDialogP
                             value={item.matchedItemId || ''}
                             onValueChange={(v) => updateItem(i, 'matchedItemId', v)}
                           >
-                            <SelectTrigger className="h-7 text-xs">
+                            <SelectTrigger className="h-7 text-xs min-w-[180px]">
                               <SelectValue placeholder="Select item..." />
                             </SelectTrigger>
                             <SelectContent>
