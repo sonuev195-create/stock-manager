@@ -254,7 +254,7 @@ export function PaperBillScanDialog({ open, onOpenChange }: PaperBillScanDialogP
                     <TableRow>
                       <TableHead className="w-8">✓</TableHead>
                       <TableHead>Scanned Name</TableHead>
-                      <TableHead>Matched Item</TableHead>
+                      <TableHead className="min-w-[200px]">Matched Item</TableHead>
                       <TableHead className="w-20">Qty</TableHead>
                       <TableHead className="w-24">Amount ₹</TableHead>
                       <TableHead className="w-20">Rate ₹</TableHead>
