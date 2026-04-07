@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Upload, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { useItems } from '@/hooks/useItems';
 import { useBatchesWithStock } from '@/hooks/useBatches';
@@ -86,7 +87,7 @@ export default function BulkBillUpload() {
       const quantity = parseFloat(row[8]) || 0;        // Column I (0-indexed: 8)
       const amount = parseFloat(row[12]) || 0;         // Column M (0-indexed: 12)
 
-      if (!billNumber && !itemName) continue;
+      if (!itemName && !billNumber) continue;
       if (!itemName || quantity === 0) continue;
 
       const billType = classifyBill(billNumber);
@@ -407,9 +408,25 @@ export default function BulkBillUpload() {
           <TabsContent value="sale" className="mt-4">
             {renderBillGroup('sale')}
             {counts.sale > 0 && (
-              <Button onClick={handleSyncSales} disabled={isProcessing} className="mt-4 w-full">
-                Sync {Object.keys(grouped.sale).length} Sale Bills to Inventory
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button disabled={isProcessing} className="mt-4 w-full">
+                    Sync {Object.keys(grouped.sale).length} Sale Bills to Inventory
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirm Sale Sync</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will create {Object.keys(grouped.sale).length} sale bill(s) and deduct stock from inventory. This action cannot be easily undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleSyncSales}>Confirm & Sync</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </TabsContent>
 
@@ -421,9 +438,25 @@ export default function BulkBillUpload() {
           <TabsContent value="purchase" className="mt-4">
             {renderBillGroup('purchase')}
             {counts.purchase > 0 && (
-              <Button onClick={handleSyncPurchases} disabled={isProcessing} className="mt-4 w-full">
-                Sync {Object.keys(grouped.purchase).length} Purchase Bills to Inventory
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button disabled={isProcessing} className="mt-4 w-full">
+                    Sync {Object.keys(grouped.purchase).length} Purchase Bills to Inventory
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirm Purchase Sync</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will create {Object.keys(grouped.purchase).length} purchase bill(s) and add stock to inventory. This action cannot be easily undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleSyncPurchases}>Confirm & Sync</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </TabsContent>
 

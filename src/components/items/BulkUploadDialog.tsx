@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useBulkCreateItems, type ItemInsert } from '@/hooks/useItems';
 import { useCategories } from '@/hooks/useCategories';
-import { Upload, FileDown, AlertCircle, CheckCircle2, ClipboardPaste } from 'lucide-react';
+import { Upload, FileDown, AlertCircle, CheckCircle2, ClipboardPaste, FileSpreadsheet } from 'lucide-react';
+import { read, utils } from 'xlsx';
 import type { Database } from '@/integrations/supabase/types';
 
 type UnitType = Database['public']['Enums']['unit_type'];
@@ -114,7 +115,37 @@ export function BulkUploadDialog() {
     }
   }, []);
 
-  const handleUpload = async () => {
+  const handleXlsxUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const buffer = await file.arrayBuffer();
+    const workbook = read(buffer);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows: any[][] = utils.sheet_to_json(sheet, { header: 1 });
+    
+    // Expect header row, then data rows with same columns as CSV template
+    const items: ParsedItem[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length < 2) continue;
+      const [item_code, name, shortword = '', category_name = '', unit_type_str = 'piece', primary_unit = 'pcs', secondary_unit = '', conversion_factor_str = '1', price_str = '0'] = row.map((c: any) => String(c ?? '').trim());
+      const unit_type = parseUnitType(unit_type_str);
+      const conversion_factor = parseFloat(conversion_factor_str) || 1;
+      const current_selling_price = parseFloat(price_str) || 0;
+      const isValid = !!(item_code && name);
+      items.push({
+        item_code, name, shortword, category_name, unit_type,
+        primary_unit: primary_unit || 'pcs',
+        secondary_unit: unit_type === 'piece' ? '' : (secondary_unit || 'pcs'),
+        conversion_factor, current_selling_price,
+        isValid, error: isValid ? undefined : 'Missing required fields',
+      });
+    }
+    setParsedItems(items);
+    setStep('preview');
+  };
+
+
     const validItems = parsedItems.filter(item => item.isValid);
     
     const itemsToCreate: ItemInsert[] = validItems.map(item => {
@@ -187,12 +218,18 @@ ITM003,Cement Bag,Cement,Building,piece,pcs,,1,380`;
               <p className="text-sm text-muted-foreground">
                 Paste data from Excel/Google Sheets or enter CSV format
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <label className="cursor-pointer">
+                  <Button variant="outline" size="sm" className="h-7 gap-1" asChild>
+                    <span><FileSpreadsheet className="w-3 h-3" /> Upload XLSX</span>
+                  </Button>
+                  <Input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleXlsxUpload} />
+                </label>
                 <Button variant="outline" size="sm" className="h-7 gap-1" onClick={handlePaste}>
-                  <ClipboardPaste className="w-3 h-3" /> Paste from Clipboard
+                  <ClipboardPaste className="w-3 h-3" /> Paste
                 </Button>
                 <Button variant="outline" size="sm" className="h-7 gap-1" onClick={downloadTemplate}>
-                  <FileDown className="w-3 h-3" /> Download Template
+                  <FileDown className="w-3 h-3" /> Template
                 </Button>
               </div>
             </div>
