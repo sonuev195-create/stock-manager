@@ -1,4 +1,4 @@
-import { Home, ShoppingCart, FileText, Package, Boxes, Truck, Settings, Download, LogOut, Receipt, BookOpen, BarChart3 } from 'lucide-react';
+import { Home, ShoppingCart, FileText, Package, Boxes, Truck, Settings, Download, LogOut, Receipt, BookOpen, BarChart3, Upload } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -23,6 +23,7 @@ const mainItems = [
   { title: 'Bills', url: '/bills', icon: Receipt },
   { title: 'Today', url: '/ledger', icon: BookOpen },
   { title: 'Reports', url: '/reports', icon: BarChart3 },
+  { title: 'Bill Upload', url: '/bulk-upload', icon: Upload },
 ];
 
 const inventoryItems = [
