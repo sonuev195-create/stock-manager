@@ -218,12 +218,18 @@ ITM003,Cement Bag,Cement,Building,piece,pcs,,1,380`;
               <p className="text-sm text-muted-foreground">
                 Paste data from Excel/Google Sheets or enter CSV format
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <label className="cursor-pointer">
+                  <Button variant="outline" size="sm" className="h-7 gap-1" asChild>
+                    <span><FileSpreadsheet className="w-3 h-3" /> Upload XLSX</span>
+                  </Button>
+                  <Input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleXlsxUpload} />
+                </label>
                 <Button variant="outline" size="sm" className="h-7 gap-1" onClick={handlePaste}>
-                  <ClipboardPaste className="w-3 h-3" /> Paste from Clipboard
+                  <ClipboardPaste className="w-3 h-3" /> Paste
                 </Button>
                 <Button variant="outline" size="sm" className="h-7 gap-1" onClick={downloadTemplate}>
-                  <FileDown className="w-3 h-3" /> Download Template
+                  <FileDown className="w-3 h-3" /> Template
                 </Button>
               </div>
             </div>
