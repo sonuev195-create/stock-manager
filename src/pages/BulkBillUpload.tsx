@@ -86,7 +86,7 @@ export default function BulkBillUpload() {
       const quantity = parseFloat(row[8]) || 0;        // Column I (0-indexed: 8)
       const amount = parseFloat(row[12]) || 0;         // Column M (0-indexed: 12)
 
-      if (!billNumber && !itemName) continue;
+      if (!itemName && !billNumber) continue;
       if (!itemName || quantity === 0) continue;
 
       const billType = classifyBill(billNumber);
