@@ -289,9 +289,9 @@ export default function BulkBillUpload() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">₹{total.toFixed(2)}</span>
                     {allConfirmed ? (
-                      <CheckCircle className="w-4 h-4 text-green-500" />
+                      <CheckCircle className="w-4 h-4 text-primary" />
                     ) : (
-                      <AlertCircle className="w-4 h-4 text-yellow-500" />
+                      <AlertCircle className="w-4 h-4 text-muted-foreground" />
                     )}
                   </div>
                 </div>
@@ -315,7 +315,7 @@ export default function BulkBillUpload() {
                           <TableCell className="text-xs py-1">{bi.itemName}</TableCell>
                           <TableCell className="text-xs py-1 min-w-[150px]">
                             {bi.confidence >= 0.8 ? (
-                              <span className="text-green-600">{bi.matchedItemName}</span>
+                              <span className="text-primary">{bi.matchedItemName}</span>
                             ) : (
                               <Select
                                 value={bi.matchedItemId || ''}
