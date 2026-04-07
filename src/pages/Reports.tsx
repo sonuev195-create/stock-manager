@@ -11,10 +11,13 @@ import { useSales } from '@/hooks/useSales';
 import { usePurchases } from '@/hooks/usePurchases';
 import { useSuppliersWithTotals } from '@/hooks/useSupplierPayments';
 import { useCategories } from '@/hooks/useCategories';
+import { useBatchesWithStock } from '@/hooks/useBatches';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 import { ITEM_COLUMNS, SALE_COLUMNS, PURCHASE_COLUMNS, SUPPLIER_COLUMNS, INVENTORY_COLUMNS } from '@/lib/exportUtils';
 import { getReportColumns } from '@/hooks/useSettings';
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, isWithinInterval } from 'date-fns';
-import { BarChart3, TrendingUp, TrendingDown, Package, ShoppingCart, Truck, DollarSign, FileText } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, Package, ShoppingCart, Truck, DollarSign, FileText, BookOpen } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const PERIOD_OPTIONS = [
@@ -362,6 +365,187 @@ function SupplierReport() {
   );
 }
 
+function ItemLedgerReport() {
+  const { data: items } = useItems();
+  const [selectedItemId, setSelectedItemId] = useState<string>('');
+
+  // Fetch all sale_items and purchase_items for the selected item
+  const { data: saleItems = [] } = useQuery({
+    queryKey: ['item-ledger-sales', selectedItemId],
+    queryFn: async () => {
+      if (!selectedItemId) return [];
+      const { data, error } = await supabase
+        .from('sale_items')
+        .select('*, sales(sale_number, sale_date, customer_name), batches(batch_name)')
+        .eq('item_id', selectedItemId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedItemId,
+  });
+
+  const { data: purchaseItems = [] } = useQuery({
+    queryKey: ['item-ledger-purchases', selectedItemId],
+    queryFn: async () => {
+      if (!selectedItemId) return [];
+      const { data, error } = await supabase
+        .from('purchase_items')
+        .select('*, purchases(purchase_number, purchase_date, suppliers(name))')
+        .eq('item_id', selectedItemId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedItemId,
+  });
+
+  const selectedItem = items?.find(i => i.id === selectedItemId);
+
+  // Combine into a ledger
+  const ledger = useMemo(() => {
+    const entries: { date: string; type: string; ref: string; party: string; batch: string; qtyIn: number; qtyOut: number; rate: number; amount: number }[] = [];
+
+    purchaseItems.forEach((pi: any) => {
+      entries.push({
+        date: pi.purchases?.purchase_date || pi.created_at,
+        type: 'Purchase',
+        ref: pi.purchases?.purchase_number || '',
+        party: pi.purchases?.suppliers?.name || '-',
+        batch: '-',
+        qtyIn: Number(pi.quantity),
+        qtyOut: 0,
+        rate: Number(pi.purchase_price),
+        amount: Number(pi.total),
+      });
+    });
+
+    saleItems.forEach((si: any) => {
+      entries.push({
+        date: si.sales?.sale_date || si.created_at,
+        type: 'Sale',
+        ref: si.sales?.sale_number || '',
+        party: si.sales?.customer_name || '-',
+        batch: si.batches?.batch_name || '-',
+        qtyIn: 0,
+        qtyOut: Number(si.quantity_primary),
+        rate: Number(si.rate),
+        amount: Number(si.total),
+      });
+    });
+
+    entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // Calculate running balance
+    let balance = 0;
+    return entries.map(e => {
+      balance += e.qtyIn - e.qtyOut;
+      return { ...e, balance };
+    });
+  }, [saleItems, purchaseItems]);
+
+  const totals = useMemo(() => {
+    const totalIn = ledger.reduce((s, e) => s + e.qtyIn, 0);
+    const totalOut = ledger.reduce((s, e) => s + e.qtyOut, 0);
+    const totalPurchaseAmt = ledger.filter(e => e.type === 'Purchase').reduce((s, e) => s + e.amount, 0);
+    const totalSaleAmt = ledger.filter(e => e.type === 'Sale').reduce((s, e) => s + e.amount, 0);
+    return { totalIn, totalOut, totalPurchaseAmt, totalSaleAmt };
+  }, [ledger]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+          <SelectTrigger className="w-[250px] h-8 text-sm"><SelectValue placeholder="Select an item" /></SelectTrigger>
+          <SelectContent>
+            {items?.map(item => (
+              <SelectItem key={item.id} value={item.id} className="text-xs">
+                {item.name} ({item.item_code})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {selectedItem && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card><CardContent className="pt-4">
+              <div className="text-xs text-muted-foreground">Total Purchased</div>
+              <div className="text-xl font-bold font-mono">{totals.totalIn} {selectedItem.primary_unit}</div>
+              <div className="text-xs text-muted-foreground">₹{totals.totalPurchaseAmt.toFixed(0)}</div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-4">
+              <div className="text-xs text-muted-foreground">Total Sold</div>
+              <div className="text-xl font-bold font-mono">{totals.totalOut} {selectedItem.primary_unit}</div>
+              <div className="text-xs text-muted-foreground">₹{totals.totalSaleAmt.toFixed(0)}</div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-4">
+              <div className="text-xs text-muted-foreground">Current Stock</div>
+              <div className="text-xl font-bold font-mono">{selectedItem.total_stock || 0} {selectedItem.primary_unit}</div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-4">
+              <div className="text-xs text-muted-foreground">Selling Price</div>
+              <div className="text-xl font-bold font-mono">₹{selectedItem.current_selling_price}</div>
+            </CardContent></Card>
+          </div>
+
+          <Card>
+            <CardHeader className="py-3"><CardTitle className="text-sm">Item Ledger - {selectedItem.name}</CardTitle></CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-auto">
+                <Table className="data-table">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Date</TableHead>
+                      <TableHead className="text-xs">Type</TableHead>
+                      <TableHead className="text-xs">Ref#</TableHead>
+                      <TableHead className="text-xs">Party</TableHead>
+                      <TableHead className="text-xs">Batch</TableHead>
+                      <TableHead className="text-xs text-right">In</TableHead>
+                      <TableHead className="text-xs text-right">Out</TableHead>
+                      <TableHead className="text-xs text-right">Rate</TableHead>
+                      <TableHead className="text-xs text-right">Amount</TableHead>
+                      <TableHead className="text-xs text-right">Balance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ledger.map((entry, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="text-xs">{format(new Date(entry.date), 'dd MMM yy')}</TableCell>
+                        <TableCell>
+                          <Badge variant={entry.type === 'Purchase' ? 'secondary' : 'default'} className="text-[10px]">
+                            {entry.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs font-mono">{entry.ref}</TableCell>
+                        <TableCell className="text-xs">{entry.party}</TableCell>
+                        <TableCell className="text-xs">{entry.batch}</TableCell>
+                        <TableCell className="text-xs text-right font-mono text-profit">{entry.qtyIn > 0 ? entry.qtyIn : ''}</TableCell>
+                        <TableCell className="text-xs text-right font-mono text-loss">{entry.qtyOut > 0 ? entry.qtyOut : ''}</TableCell>
+                        <TableCell className="text-xs text-right font-mono">₹{entry.rate.toFixed(2)}</TableCell>
+                        <TableCell className="text-xs text-right font-mono">₹{entry.amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-xs text-right font-mono font-semibold">{entry.balance}</TableCell>
+                      </TableRow>
+                    ))}
+                    {ledger.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={10} className="text-center text-muted-foreground text-sm py-4">
+                          No transactions found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Reports() {
   return (
     <div className="space-y-4">
@@ -371,16 +555,18 @@ export default function Reports() {
       </div>
 
       <Tabs defaultValue="sales">
-        <TabsList className="grid grid-cols-4 w-full max-w-lg">
+        <TabsList className="grid grid-cols-5 w-full max-w-2xl">
           <TabsTrigger value="sales" className="gap-1 text-xs"><ShoppingCart className="w-3 h-3" />Sales</TabsTrigger>
           <TabsTrigger value="purchases" className="gap-1 text-xs"><FileText className="w-3 h-3" />Purchases</TabsTrigger>
           <TabsTrigger value="inventory" className="gap-1 text-xs"><Package className="w-3 h-3" />Inventory</TabsTrigger>
           <TabsTrigger value="suppliers" className="gap-1 text-xs"><Truck className="w-3 h-3" />Suppliers</TabsTrigger>
+          <TabsTrigger value="item-ledger" className="gap-1 text-xs"><BookOpen className="w-3 h-3" />Item Ledger</TabsTrigger>
         </TabsList>
         <TabsContent value="sales" className="mt-4"><SalesReport /></TabsContent>
         <TabsContent value="purchases" className="mt-4"><PurchaseReport /></TabsContent>
         <TabsContent value="inventory" className="mt-4"><InventoryReport /></TabsContent>
         <TabsContent value="suppliers" className="mt-4"><SupplierReport /></TabsContent>
+        <TabsContent value="item-ledger" className="mt-4"><ItemLedgerReport /></TabsContent>
       </Tabs>
     </div>
   );
