@@ -19,6 +19,7 @@ import Settings from "./pages/Settings";
 import DailyLedger from "./pages/DailyLedger";
 import SaleEdit from "./pages/SaleEdit";
 import Reports from "./pages/Reports";
+import BulkBillUpload from "./pages/BulkBillUpload";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ function AppRoutes() {
       <Route path="/sales/edit/:id" element={<ProtectedRoute><SaleEdit /></ProtectedRoute>} />
       <Route path="/ledger" element={<ProtectedRoute><DailyLedger /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+      <Route path="/bulk-upload" element={<ProtectedRoute><BulkBillUpload /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/install" element={<ProtectedRoute><Install /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
