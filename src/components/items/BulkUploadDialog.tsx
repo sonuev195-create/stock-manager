@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useBulkCreateItems, type ItemInsert } from '@/hooks/useItems';
 import { useCategories } from '@/hooks/useCategories';
-import { Upload, FileDown, AlertCircle, CheckCircle2, ClipboardPaste } from 'lucide-react';
+import { Upload, FileDown, AlertCircle, CheckCircle2, ClipboardPaste, FileSpreadsheet } from 'lucide-react';
+import { read, utils } from 'xlsx';
 import type { Database } from '@/integrations/supabase/types';
 
 type UnitType = Database['public']['Enums']['unit_type'];
