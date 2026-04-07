@@ -195,10 +195,13 @@ export default function BulkBillUpload() {
 
         const saleItems = validItems.map(vi => {
           const batch = batchesWithStock.find(b => b.id === vi.matchedBatchId);
+          const matchedItem = items.find(it => it.id === vi.matchedItemId);
           const rate = vi.quantity > 0 ? vi.amount / vi.quantity : 0;
           return {
             item_id: vi.matchedItemId!,
+            item_name: matchedItem?.name || vi.itemName,
             batch_id: vi.matchedBatchId!,
+            batch_name: batch?.batch_name || '',
             quantity_primary: vi.quantity,
             quantity_secondary: null as number | null,
             rate,
@@ -209,7 +212,7 @@ export default function BulkBillUpload() {
         });
 
         await createSale.mutateAsync({
-          sale_type: 'bulk',
+          sale_type: 'quick',
           discount: 0,
           items: saleItems,
         });
@@ -237,6 +240,8 @@ export default function BulkBillUpload() {
           const matchedItem = items.find(it => it.id === vi.matchedItemId);
           return {
             item_id: vi.matchedItemId!,
+            item_name: matchedItem?.name || vi.itemName,
+            item_code: matchedItem?.item_code || '',
             quantity: vi.quantity,
             purchase_price: rate,
             selling_price: matchedItem?.current_selling_price || rate,
@@ -245,6 +250,8 @@ export default function BulkBillUpload() {
         });
 
         await createPurchase.mutateAsync({
+          supplier_id: null,
+          purchase_date: new Date().toISOString().split('T')[0],
           items: purchaseItems,
           notes: `Bulk upload - ${billNum}`,
         });
