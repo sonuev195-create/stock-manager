@@ -15,12 +15,6 @@ import { useCreateSale } from '@/hooks/useSales';
 import { useCreatePurchase } from '@/hooks/usePurchases';
 import { findBestMatch } from '@/lib/fuzzyMatch';
 import { toast } from 'sonner';
-import { useItems } from '@/hooks/useItems';
-import { useBatchesWithStock } from '@/hooks/useBatches';
-import { useCreateSale } from '@/hooks/useSales';
-import { useCreatePurchase } from '@/hooks/usePurchases';
-import { findBestMatch } from '@/lib/fuzzyMatch';
-import { toast } from 'sonner';
 
 type BillType = 'sale' | 'sale_return' | 'purchase' | 'purchase_return';
 
