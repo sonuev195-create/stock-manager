@@ -211,9 +211,13 @@ export default function BulkBillUpload() {
           };
         });
 
+        const subtotal = saleItems.reduce((s, i) => s + i.total, 0);
         await createSale.mutateAsync({
           sale_type: 'quick',
           discount: 0,
+          subtotal,
+          tax: 0,
+          total_amount: subtotal,
           items: saleItems,
         });
         count++;
