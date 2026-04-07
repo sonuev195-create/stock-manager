@@ -342,7 +342,7 @@ export default function BulkBillUpload() {
                               className="inline-flex"
                             >
                               {bi.confirmed ? (
-                                <CheckCircle className="w-4 h-4 text-green-500" />
+                                <CheckCircle className="w-4 h-4 text-primary" />
                               ) : (
                                 <XCircle className="w-4 h-4 text-destructive" />
                               )}
