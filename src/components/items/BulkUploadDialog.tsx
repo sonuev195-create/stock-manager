@@ -145,7 +145,7 @@ export function BulkUploadDialog() {
     setStep('preview');
   };
 
-
+  const handleUpload = async () => {
     const validItems = parsedItems.filter(item => item.isValid);
     
     const itemsToCreate: ItemInsert[] = validItems.map(item => {
